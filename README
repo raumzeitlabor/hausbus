@@ -1,1 +1,74 @@
-RaumZeitLabor hausbus git-repo
+RaumZeitLabor: Hausbus
+======================
+
+== Technisches
+
+Wir benutzen RS-485, direkt mit der UART des Mikrokontrollers verbunden, als
+Bus. Die serielle Schnittstelle (UART) betreiben wir mit 9N1 (9 Datenbits, kein
+Paritybit, ein Stopbit). Das neunte Bit gibt hierbei an, ob es sich um ein
+Adresspaket handelt. Das hat den Vorteil, dass man die ATmegas im
+Multi-Processor Communication Mode betreiben kann. Hierbei werden alle
+empfangenen Bytes in Hardware verworfen (generieren also keinen Interrupt), es
+sei denn, sie wurden an den jeweiligen Mikrokontroller gesendet.
+
+TODO: Die Baudrate ist noch unklar. Momentan 9600.
+
+Als Kabel kommen CAT5-Ethernet-Kabel zum Einsatz. Wir benutzen die hintere
+Stiftleiste (4 Adern) einer Ethernet-Buchse (ohne integrierten Übertrager) für
+VCC (+5V), GND, A und B (A und B sind die differentiellen Datenleitungen des
+RS-485-Bus).
+
+Damit eine gewisse Performance garantiert wird und aufgrund der Empfehlungen in
+[1] können maximal 30 Geräte an einem Bus hängen. Sollte man mehr Geräte
+brauchen, kann man die Busmaster, welche ja nach Ethernet umsetzen, auf
+Ethernet-Ebene zusammenschalten.
+
+== Paketformat
+
+01: destination address (1 byte)
+02: source address (1 byte)
+03: checksum (currently ignored)
+04: packet length, high byte
+05: packet length, low byte
+06-xx: payload
+
+maximale paketgröße für pakete, die der busmaster sendet und die clients empfangen: 32 byte
+
+als c-struct:
+
+struct buspkt {
+    uint8_t destination;
+    uint8_t source;
+    uint8_t checksum;
+    uint8_t length_hi;
+    uint8_t length_lo;
+};
+
+== Adressen
+
+00:      Busmaster
+01-29:   Teilnehmer am bus
+50-100:  Broadcast-Adressen als Rückkanal (werden auf IPv6-Multicast-Adressen umgesetzt)
+101-254: reserviert
+
+== Protokoll
+
+• der busmaster schickt alle 1s eine ping-nachricht über den bus für jeden client
+• der client antwortet darauf innerhalb von 15 ms. in der antwort ist
+  enthalten, wieviele pakete er für den busmaster hat (der einfachheit halber
+  fragt man derzeit einfach alle ab, könnte aber später dadurch über eine
+  bus-arbitration nachdenken).
+• der busmaster holt sich das paket ab und schickt ein ethernet-paket mit dem
+  payload raus, als IPv6-multicast im lokalen Netz, damit mehrere Anwendungen
+  das Paket empfangen können (die einzelnen mc senden dann an bestimmte
+  broadcast-adressen)
+
+== Implementation für Busteilnehmer
+
+• man benutzt das makefile aus der vorlage und holt sich dadurch die library
+  mit ins projekt
+• in der mainloop muss man nun auf neue pakete prüfen (pakete für andere
+  mikrokontroller werden verworfen) und diese entsprechend behandeln. außerdem
+  gibt es einen returncode für „der bus ist kaputt“
+• bevor man pakete sendet, muss man zunächst schauen, ob das alte paket bereits
+  gesendet wurde
