@@ -43,6 +43,7 @@ uint8_t uip_buf[UIP_BUFSIZE+2];
 
 bool gotmsg = true;
 
+#if 0
 static void build_pkt(struct buspkt *pkt, uint8_t dest, uint8_t *payload, int length) {
     pkt->start_byte = '^';
     /* TODO */
@@ -52,40 +53,69 @@ static void build_pkt(struct buspkt *pkt, uint8_t dest, uint8_t *payload, int le
     pkt->length = length;
     pkt->payload = payload;
 }
+#endif
 
+static uint16_t chksum(uint16_t sum, const uint8_t *data, uint16_t len)
+{
+  uint16_t t;
+  const uint8_t *dataptr;
+  const uint8_t *last_byte;
 
-/*
- * Generates an IP checksum for the packet
- * TODO: directly store it at the right place in the buffer
- *
- */
-static uint16_t ip_checksum(uint8_t *buffer, uint8_t len) {
-    uint16_t val;
-    uint16_t sum = 0;
-    uint8_t c;
-    for (c = 0; c < len; c += 2) {
-        val = (buffer[c] << 8) | buffer[c+1];
-        sum += val;
+  dataptr = data;
+  last_byte = data + len - 1;
+
+  while(dataptr < last_byte) {  /* At least two more bytes */
+    t = (dataptr[0] << 8) + dataptr[1];
+    sum += t;
+    if(sum < t) {
+      sum++;            /* carry */
     }
-    sum = (sum > 16) + (sum & 0xFFFF);
-    sum += (sum >> 16);
-    return ~sum;
+    dataptr += 2;
+  }
+
+  if(dataptr == last_byte) {
+    t = (dataptr[0] << 8) + 0;
+    sum += t;
+    if(sum < t) {
+      sum++;            /* carry */
+    }
+  }
+
+  /* Return sum in host byte order. */
+  return sum;
 }
 
 static void syslog_send(const char *str, int payload_len) {
     int c;
-        uip_buf[17] = 20 /* ip header */ + 8 /* udp header */ + payload_len; /* len = 23 */
-        uip_buf[24] = 0x00;
-        uip_buf[25] = 0x00;
-        uint16_t checksum = ip_checksum(&uip_buf[14], 20);
-        uip_buf[24] = (checksum & 0xFF00) >> 8;
-        uip_buf[25] = (checksum & 0x00FF);
-        uip_buf[39] = 8 /* udp header */ + payload_len; /* data length high */
-        for (c = 0; c < payload_len; c++)
-            uip_buf[42 + c] = str[c];
+    int len = 8 /* udp header */ + payload_len;
 
-        uip_len = 43 + payload_len;
-        transmit_packet();
+    /* IPv6 header → length */
+    uip_buf[19] = len;
+
+    /* UDP header → length */
+    uip_buf[59] = len;
+
+    /* initialize UDP checksum to zero */
+    uip_buf[60] = 0x00;
+    uip_buf[61] = 0x00;
+
+    for (c = 0; c < payload_len; c++)
+        uip_buf[62 + c] = str[c];
+
+    /* calculate UDP checksum */
+    uint16_t sum = 0;
+    sum = len + 17;
+    sum = chksum(sum, (uint8_t*)&uip_buf[22], 2 * 16);
+    sum = chksum(sum, &uip_buf[54], len);
+    sum = (sum == 0 ? 0xffff : ~sum);
+    if (sum == 0)
+        sum = 0xffff;
+
+    uip_buf[60] = (sum & 0xFF00) >> 8;
+    uip_buf[61] = (sum & 0x00FF);
+
+    uip_len = 62 + payload_len;
+    transmit_packet();
 }
 
 
@@ -106,13 +136,13 @@ int main(int argc, char *argv[]) {
         DBG("Initialized ENC28J60\r\n");
 
         /* paket aufbereiten und schicken */
-        /* mac destination */
-        uip_buf[0] = 0x00;
-        uip_buf[1] = 0x1f;
-        uip_buf[2] = 0x16;
-        uip_buf[3] = 0x1a;
-        uip_buf[4] = 0xf5;
-        uip_buf[5] = 0xb8;
+        /* mac destination: IPv6 multicast */
+        uip_buf[0] = 0x33;
+        uip_buf[1] = 0x33;
+        uip_buf[2] = 0x00;
+        uip_buf[3] = 0xb5;
+        uip_buf[4] = 0x00;
+        uip_buf[5] = 0x01;
         /* mac source */
         uip_buf[6] = 0xAC;
         uip_buf[7] = 0xDE;
@@ -121,55 +151,68 @@ int main(int argc, char *argv[]) {
         uip_buf[10] = 0x0F;
         uip_buf[11] = 0xD0;
         /* ethertype (IP) */
-        uip_buf[12] = 0x08;
-        uip_buf[13] = 0x00;
+        uip_buf[12] = 0x86;
+        uip_buf[13] = 0xdd;
+
         /* ethernet payload */
-        uip_buf[14] = 0x45; /* minimal header len, ipv4 */
-        uip_buf[15] = 0x00; /* DSCP, ECN */
-        /* total length: */
+        uip_buf[14] = 0x60; /* ipv6, traffic class 0 */
+        /* flowlabel */
+        uip_buf[15] = 0x00;
         uip_buf[16] = 0x00;
-        //uip_buf[17] = 20 /* ip header */ + 8 /* udp header */ + payload_len; /* len = 23 */
-
-        /* identification (16bit) */
+        uip_buf[17] = 0x00;
+        /* total length: */
         uip_buf[18] = 0x00;
-        uip_buf[19] = 0x00;
-        /* flags + fragment offset (16bit) */
-        uip_buf[20] = 0x00;
-        uip_buf[21] = 0x00;
+        //uip_buf[19] = 8 /* udp header */ + payload_len;
 
-        /* ttl (8bit) */
-        uip_buf[22] = 23;
-        /* protocol */
-        uip_buf[23] = 0x11; /* udp */
-        /* checksum */
+        /* next header: udp */
+        uip_buf[20] = 0x11;
+        /* hop limit */
+        uip_buf[21] = 0x02;
+        /* source: fe80::aede:48ff:fefd:0fd0 */
+        uip_buf[22] = 0xfe;
+        uip_buf[23] = 0x80;
         uip_buf[24] = 0x00;
         uip_buf[25] = 0x00;
-        /* source ip */
-        uip_buf[26] = 0xC0;
-        uip_buf[27] = 0xa8;
-        uip_buf[28] = 0x01;
-        uip_buf[29] = 0x2B;
-        /* destination ip */
-        uip_buf[30] = 0xC0;
-        uip_buf[31] = 0xA8;
-        uip_buf[32] = 0x01;
-        uip_buf[33] = 0x2A;
-        //uint16_t checksum = ip_checksum(&uip_buf[14], 20);
-        //uip_buf[24] = (checksum & 0xFF00) >> 8;
-        //uip_buf[25] = (checksum & 0x00FF);
-        /* data */
-        /* TODO: UDP */
-        uip_buf[34] = 0x02; /* source port low */
-        uip_buf[35] = 0x02; /* source port high */
-        uip_buf[36] = 0x02; /* dest port low */
-        uip_buf[37] = 0x02; /* dest port high */
-        uip_buf[38] = 0; /* data length low */
-        //uip_buf[39] = 8 /* udp header */ + payload_len; /* data length high */
-        /* TODO: udp checksum */
+        uip_buf[26] = 0x00;
+        uip_buf[27] = 0x00;
+        uip_buf[28] = 0x00;
+        uip_buf[29] = 0x00;
+        uip_buf[30] = 0xae;
+        uip_buf[31] = 0xde;
+        uip_buf[32] = 0x48;
+        uip_buf[33] = 0xff;
+        uip_buf[34] = 0xfe;
+        uip_buf[35] = 0xfd;
+        uip_buf[36] = 0x0f;
+        uip_buf[37] = 0xd0;
+        /* destination: ff02::b5:1 */
+        uip_buf[38] = 0xff;
+        uip_buf[39] = 0x02;
+
         uip_buf[40] = 0x00;
         uip_buf[41] = 0x00;
-        /* TODO? crc32 */
+        uip_buf[42] = 0x00;
+        uip_buf[43] = 0x00;
 
+        uip_buf[44] = 0x00;
+        uip_buf[45] = 0x00;
+        uip_buf[46] = 0x00;
+        uip_buf[47] = 0x00;
+
+        uip_buf[48] = 0x00;
+        uip_buf[49] = 0x00;
+        uip_buf[50] = 0x00;
+        uip_buf[51] = 0xb5;
+        uip_buf[52] = 0x00;
+        uip_buf[53] = 0x01;
+
+        /* data */
+        /* UDP */
+        uip_buf[54] = 0x02; /* source port low */
+        uip_buf[55] = 0x02; /* source port high */
+        uip_buf[56] = 0x02; /* dest port low */
+        uip_buf[57] = 0x02; /* dest port high */
+        uip_buf[58] = 0; /* data length high */
 
         char buf[16] = "serial:       X\n";
             for (;;) {
@@ -183,6 +226,7 @@ int main(int argc, char *argv[]) {
                 DBG("Done\r\n");
 
             }
+#if 0
             /* We are the busmaster */
             printf("sending ping\n");
             for (int c = 0; c < 2; c++) {
@@ -230,5 +274,6 @@ int main(int argc, char *argv[]) {
             }
             printf("\n");
             _delay_ms(500);
+#endif
     }
 }
