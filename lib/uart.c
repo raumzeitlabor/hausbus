@@ -44,11 +44,11 @@ static uint8_t bytes_waiting() {
  *
  */
 static uint16_t packet_length() {
-    if (bytes_waiting() < 5)
+    if (bytes_waiting() < sizeof(struct buspkt))
         return 0xfe;
 
     uint8_t c, next = uartread;
-    for (c = 0; c < 3; c++)
+    for (c = 0; c < 4; c++)
         next = (next + 1) & (UARTBUF - 1);
     uint16_t length = (uartbuf[next] << 8);
     next = (next + 1) & (UARTBUF - 1);
@@ -63,8 +63,25 @@ static uint16_t packet_length() {
  */
 static void check_complete() {
     uint8_t waiting = bytes_waiting();
-    if (waiting < 5)
+    if (waiting < sizeof(struct buspkt))
         return;
+
+    /* check header checksum */
+    uint8_t save = 0;
+    uint8_t next = uartread;
+    uint8_t sum = 0;
+    uint8_t c;
+    for (c = 0; c < sizeof(struct buspkt); c++) {
+        if (c != 2)
+            sum += uartbuf[next];
+        else save = uartbuf[next];
+        next = (next + 1) & (UARTBUF - 1);
+    }
+
+    if (sum != save) {
+        status = BUS_STATUS_WRONG_CRC;
+        return;
+    }
 
     if (waiting == packet_length())
         status = BUS_STATUS_MESSAGE;
