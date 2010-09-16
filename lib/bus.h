@@ -19,15 +19,13 @@ enum {
 enum { WAIT_TIMEOUT = 0, WAIT_DATA = 1 };
 
 /* Functions implemented either in socket.c (simulation) or uart.c (microcontroller) */
-int wait_for_data(int ms);
-struct buspkt *read_packet();
+struct buspkt *current_packet();
 void send_packet(struct buspkt *pkt);
 void net_init();
 
 uint8_t bus_status();
 
 /* TODO: move */
-uint8_t getbyte();
 void uart_puts(char *str);
 
 #endif

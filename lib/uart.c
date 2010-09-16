@@ -7,6 +7,8 @@
 #include <util/setbaud.h>
 #include <util/delay.h>
 
+#include "bus.h"
+
 /* simple ringbuffer */
 #define UARTBUF 32
 
@@ -14,20 +16,62 @@ static volatile uint8_t uartbuf[UARTBUF];
 static volatile uint8_t uartwrite = 0;
 static volatile uint8_t uartread = 0;
 static volatile uint8_t errflag = 0;
+static volatile uint8_t status = BUS_STATUS_IDLE;
 
-uint8_t getbyte() {
-    while (uartread == uartwrite && errflag == 0)
-        _delay_ms(1);
-    if (errflag != 0) {
-        uint8_t ret = errflag;
-        errflag = 0;
-        return ret;
+/* contains a non-wrapping copy of the current packet */
+static uint8_t packet[UARTBUF];
+
+/*
+ * Returns the number of bytes waiting in the ringbuffer
+ *
+ */
+static uint8_t bytes_waiting() {
+    if (uartread == uartwrite)
+        return 0;
+
+    uint8_t c = 0;
+    uint8_t next = uartread;
+    while (next != uartwrite) {
+        c++;
+        next = (next + 1) & (UARTBUF - 1);
     }
-    uint8_t byte = uartbuf[uartread];
-    uartbuf[uartread] = 'X';
-    uint8_t next = (uartread + 1) & (UARTBUF-1);
-    uartread = next;
-    return byte;
+    return c;
+}
+
+/*
+ * Returns the packet length (header and payload) of the packet currently in
+ * the ringbuffer (uartbuf).
+ *
+ */
+static uint16_t packet_length() {
+    if (bytes_waiting() < 5)
+        return 0xfe;
+
+    uint8_t c, next = uartread;
+    for (c = 0; c < 3; c++)
+        next = (next + 1) & (UARTBUF - 1);
+    uint16_t length = (uartbuf[next] << 8);
+    next = (next + 1) & (UARTBUF - 1);
+    length |= uartbuf[next];
+
+    return sizeof(struct buspkt) + length;
+}
+
+/*
+ * Returns whether a complete packet is in the ringbuffer.
+ *
+ */
+static void check_complete() {
+    uint8_t waiting = bytes_waiting();
+    if (waiting < 5)
+        return;
+
+    if (waiting == packet_length())
+        status = BUS_STATUS_MESSAGE;
+}
+
+uint8_t bus_status() {
+    return status;
 }
 
 ISR(USART0_RX_vect) {
@@ -40,9 +84,7 @@ ISR(USART0_RX_vect) {
     data = UDR0;
 
     if (is_addr) {
-        errflag = 'A';
         UCSR0A &= ~(1 << MPCM0);
-        return;
     }
 
     /* TODO: error handling? */
@@ -63,19 +105,45 @@ ISR(USART0_RX_vect) {
 
     uartbuf[uartwrite] = data;
     uartwrite = next;
+
+    check_complete();
+
+    /* After the message was received, we switch back to MPCPU mode */
+    if (status == BUS_STATUS_MESSAGE)
+        UCSR0A |= (1 << MPCM0);
 }
 
-int wait_for_data(int ms) {
+/*
+ * Returns a pointer to a static buffer containing a copy of the packet which
+ * is currently in the ringbuffer. The copy is necessary to have a non-wrapping
+ * linear buffer which you can cast to struct buspkt.
+ *
+ */
+struct buspkt *current_packet() {
+    uint8_t next = uartread;
+    uint16_t c, length = packet_length();
+    for (c = 0; c < length; c++) {
+        packet[c] = uartbuf[next];
+        next = (next + 1) & (UARTBUF - 1);
+    }
+
+    return (struct buspkt*)packet;
 }
 
-struct buspkt *read_packet() {
-#if 0
-    static struct buspkt pkt;
-    pkt.start_byte = getbyte();
-    if (pkt.start_byte != '^')
-        return NULL;
-    pkt.checksum = getbyte();
-#endif
+/*
+ * Called when the current packet is handled. Discards the current packet from
+ * the ringbuffer by moving the uartread index.
+ *
+ */
+void packet_done() {
+    uint16_t length = packet_length();
+    while (length > 0) {
+        uartread = (uartread + 1) & (UARTBUF-1);
+        length--;
+    }
+
+    status = BUS_STATUS_IDLE;
+    check_complete();
 }
 
 void send_packet(struct buspkt *pkt) {
