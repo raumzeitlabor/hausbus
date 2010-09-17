@@ -20,9 +20,11 @@
 #define LO8(x)  ((uint8_t)(x))
 #define HI8(x)  ((uint8_t)((x) >> 8))
 
-#define UIP_BUFSIZE 400
+#define UIP_BUFSIZE 200
 
 extern uint16_t uip_len;
+extern uint16_t uip_recvlen;
 extern uint8_t uip_buf[UIP_BUFSIZE+2];
+extern uint8_t uip_recvbuf[UIP_BUFSIZE+2];
 
 #endif
