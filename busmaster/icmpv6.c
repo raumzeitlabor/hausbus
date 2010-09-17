@@ -48,6 +48,8 @@ static uint16_t chksum(uint16_t sum, const uint8_t *data, uint16_t len)
 
 static void start_icmpv6_reply(uint8_t *ip6) {
     memcpy(saved, uip_buf, 59);
+    memcpy(uip_buf, uip_recvbuf + 6, 6);
+    uip_buf[11] = 0x00; /* MAC source */
     uip_buf[20] = 0x3a; /* next header: icmpv6 */
     uip_buf[21] = 0xFF; /* hop limit must be 255 */
     memcpy(uip_buf + 22 + 16, ip6 + 8, 16); /* destination address */
