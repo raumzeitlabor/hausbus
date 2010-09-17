@@ -15,7 +15,9 @@
 #include "enc28j60.h"
 #include "bus.h"
 #include "compat.h"
+#include "icmpv6.h"
 
+uint8_t lbuffer[32];
 /*
  * ----------------------------------------------------------------------
  * The following settings affect how many devices you can put on your bus
@@ -75,19 +77,10 @@ uint8_t uip_buf[UIP_BUFSIZE+2] =
     0 /* data length high */
 };
 
-bool gotmsg = true;
+uint8_t uip_recvbuf[UIP_BUFSIZE+2];
+uint16_t uip_recvlen = 0;
 
-#if 0
-static void build_pkt(struct buspkt *pkt, uint8_t dest, uint8_t *payload, int length) {
-    pkt->start_byte = '^';
-    /* TODO */
-    pkt->checksum = 0;
-    pkt->source = MYADDRESS;
-    pkt->destination = dest;
-    pkt->length = length;
-    pkt->payload = payload;
-}
-#endif
+bool gotmsg = true;
 
 static uint16_t chksum(uint16_t sum, const uint8_t *data, uint16_t len)
 {
@@ -120,7 +113,48 @@ static uint16_t chksum(uint16_t sum, const uint8_t *data, uint16_t len)
 }
 
 static void syslog_send(const char *str, int payload_len) {
-    int c;
+    uint16_t c;
+    int len = 8 /* udp header */ + payload_len;
+
+    uip_buf[5] = 1;
+    uip_buf[53] = 1;
+
+    /* copy packet->source into the MAC and IPv6 address */
+    uip_buf[11] = 0;
+    uip_buf[37] = 0;
+
+
+    /* IPv6 header → length */
+    uip_buf[19] = len;
+
+    /* UDP header → length */
+    uip_buf[59] = len;
+
+    /* initialize UDP checksum to zero */
+    uip_buf[60] = 0x00;
+    uip_buf[61] = 0x00;
+
+    for (c = 0; c < payload_len; c++)
+        uip_buf[62 + c] = str[c];
+
+    /* calculate UDP checksum */
+    uint16_t sum = 0;
+    sum = len + 17;
+    sum = chksum(sum, (uint8_t*)&uip_buf[22], 2 * 16);
+    sum = chksum(sum, &uip_buf[54], len);
+    sum = (sum == 0 ? 0xffff : ~sum);
+    if (sum == 0)
+        sum = 0xffff;
+
+    uip_buf[60] = (sum & 0xFF00) >> 8;
+    uip_buf[61] = (sum & 0x00FF);
+
+    uip_len = 62 + payload_len;
+    transmit_packet();
+}
+
+static void raw_send(const char *str, int payload_len) {
+    uint16_t c;
     int len = 8 /* udp header */ + payload_len;
 
     /* IPv6 header → length */
@@ -153,82 +187,117 @@ static void syslog_send(const char *str, int payload_len) {
 }
 
 
+
 int main(int argc, char *argv[]) {
+    /* Disable driver enable for RS485 ASAP */
     DDRC |= (1 << PC2);
     PINC &= ~(1 << PC2);
+
+    /* Initialize UART */
     net_init();
+
+    DBG("Initializing SPI...\r\n");
+
+    spi_init();
+
+    DBG("Initializing ENC28J60...\r\n");
+
+    init_enc28j60();
+
+    DBG("Initialized ENC28J60\r\n");
+
+    char buf[16] = "serial:       X\n";
+    int cnt = 0;
     while (1) {
-        /* send data via uart for testing */
-        DBG("Initializing SPI...\r\n");
+        network_process();
+        if (uip_recvlen > 0) {
+            DBG("Handling packet\r\n");
+            handle_icmpv6();
 
-        spi_init();
+            if (uip_recvbuf[20] == 0x11) {
+                /* UDP */
+                uint8_t *udp = uip_recvbuf + 14 + 40;
+                uint8_t len = udp[5] - 8;
+                /* TODO: sanity check */
+                uint8_t *recvpayload = udp + 8 /* udp */;
 
-        DBG("Initializing ENC28J60...\r\n");
+                fmt_packet(lbuffer, uip_recvbuf[53], 0xFF, recvpayload, len);
+                struct buspkt *packet = (struct buspkt*)lbuffer;
 
-        init_enc28j60();
-
-        DBG("Initialized ENC28J60\r\n");
-
-        char buf[16] = "serial:       X\n";
-            for (;;) {
-                DBG("Reading from UART\r\n");
-
-                uint8_t byte = getbyte();
-                buf[14] = byte;
-
-                syslog_send(buf, 16);
-
-                DBG("Done\r\n");
-
+                //syslog_send("sending packet", strlen("sending packet"));
+                send_packet(packet);
+                _delay_ms(25);
+                cnt = 85;
+                syslog_send("ethernet to rs485 done", strlen("ethernet to rs485 done"));
             }
-#if 0
-            /* We are the busmaster */
-            printf("sending ping\n");
-            for (int c = 0; c < 2; c++) {
-                struct buspkt pkt;
-                build_pkt(&pkt, c, (uint8_t*)"PING\x05", 5);
-                send_packet(&pkt);
-                if (wait_for_data(MSG_WAIT_MS) == WAIT_TIMEOUT) {
-                    printf("error: timeout: ");
-                    print_address(pkt.destination);
-                    printf(" (%d ms)\n", MSG_WAIT_MS);
 
-                    continue;
+            //syslog_send("received a packet", strlen("received a packet"));
+            buf[14] = uip_recvlen;
+
+            //syslog_send(uip_recvbuf, uip_recvlen);
+            uip_recvlen = 0;
+        }
+        _delay_ms(10);
+        if (cnt++ == 100) {
+            fmt_packet(lbuffer, 1, 0, "ping", 4);
+            struct buspkt *packet = (struct buspkt*)lbuffer;
+            syslog_send("ping sent", strlen("ping sent"));
+            send_packet(packet);
+            cnt = 0;
+        }
+
+        uint8_t status = bus_status();
+        if (status == BUS_STATUS_IDLE)
+            continue;
+
+        if (status == BUS_STATUS_MESSAGE) {
+            /* get a copy of the current packet */
+            struct buspkt *packet = current_packet();
+            uint8_t *payload = (uint8_t*)packet;
+            payload += sizeof(struct buspkt);
+
+            /* check for ping replies */
+            if (packet->destination == 0x00 &&
+                memcmp(payload, "pong", strlen("pong")) == 0) {
+                syslog_send("pong received", strlen("pong received"));
+                /* TODO: store that this controller is reachable */
+                /* check if the controller has any waiting messages */
+                if (payload[4] > 0) {
+                    /* request the message */
+                    fmt_packet(lbuffer, packet->source, 0, "send", 4);
+                    struct buspkt *reply = (struct buspkt*)lbuffer;
+                    //syslog_send("sending packet", strlen("sending packet"));
+                    _delay_ms(25);
+                    send_packet(reply);
+                    syslog_send("sendreq sent", strlen("sendreq sent"));
+                    //syslog_send(reply, reply->length_lo + sizeof(struct buspkt));
+
+                    _delay_ms(25);
+                    cnt = 0;
                 }
-                struct buspkt *recv = read_packet();
-                if (memcmp(recv->source, c, 16) != 0) {
-                    printf("ERROR: wrong source for packet\n");
-                    printf("answer from ");
-                    print_address(recv->source);
-                    continue;
-                }
-                if (strncmp((char*)recv->payload, "PONG", strlen("PONG")) != 0) {
-                    printf("ERROR: not a PONG reply\n");
-                    continue;
-                }
-                printf("pong reply from ");
-                print_address(recv->source);
-
-                int messages = recv->payload[4];
-
-                printf(" (XX ms), messages waiting: %d\n", messages);
-                if (messages == 0)
-                    continue;
-
-                printf("requesting message\n");
-                pkt.length = strlen("SENDMSG");
-                pkt.payload = (uint8_t*)"SENDMSG";
-                send_packet(&pkt);
-                if (wait_for_data(MSG_WAIT_MS) == WAIT_TIMEOUT) {
-                    printf("no answer to sendmsg in 15ms\n");
-                    continue;
-                }
-                recv = read_packet();
-                printf("got a package of len %d\n", recv->length);
-
             }
-            printf("\n");
-            _delay_ms(500);
-#endif
+
+            /* copy packet->destination into the MAC and IPv6 address */
+            uip_buf[5] = packet->destination; /* MAC */
+            uip_buf[53] = packet->destination; /* IPv6 */
+
+            /* copy packet->source into the MAC and IPv6 address */
+            uip_buf[11] = packet->source; /* MAC */
+            uip_buf[37] = packet->source; /* IPv6 */
+
+            raw_send(payload, packet->length_lo);
+
+            /* discard the packet from serial buffer */
+            packet_done();
+            continue;
+        }
+
+        if (status == BUS_STATUS_WRONG_CRC) {
+            syslog_send("broken", strlen("broken"));
+            struct buspkt *packet = current_packet();
+            raw_send(packet, 16);
+            skip_byte();
+            continue;
+        }
     }
 }
