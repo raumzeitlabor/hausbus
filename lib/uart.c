@@ -201,7 +201,7 @@ ISR(USART0_UDRE_vect) {
 void send_packet(struct buspkt *pkt) {
     /* initialize pointer / length counter */
     txwalk = (uint8_t*)pkt;
-    txcnt = sizeof(struct buspkt) + pkt->length_lo;
+    txcnt = sizeof(struct buspkt) + pkt->length_lo - 1;
 
     /* activate driver enable */
     RS485_DE_PORT |= (1 << RS485_DE_PIN);
