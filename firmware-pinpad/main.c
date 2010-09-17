@@ -27,27 +27,6 @@ static uint8_t lbuffer[32];
 static uint8_t rbuffer[32];
 
 /*
- * Formats a reply packet in the given buffer
- *
- */
-static void fmt_reply(uint8_t *buffer, uint8_t destination, void *payload, uint8_t len) {
-    struct buspkt *reply = (struct buspkt*)buffer;
-    uint8_t *payback = buffer;
-    payback += sizeof(struct buspkt);
-    reply->destination = destination;
-    reply->source = MYADDRESS;
-    reply->length_hi = 0;
-    reply->length_lo = len;
-    reply->payload_chk = 0xFF;
-    reply->header_chk = reply->destination +
-                         reply->source +
-                         reply->payload_chk +
-                         reply->length_hi +
-                         reply->length_lo;
-    memcpy(payback, payload, len);
-}
-
-/*
  * Sends the packet in the given buffer. Basically a wrapper around
  * send_packet() which adds blinking the LED and waiting for a short time
  * (25ms).
@@ -100,7 +79,7 @@ int main(int argc, char *argv[]) {
                 memcmp(payload, "ping", strlen("ping")) == 0) {
 
                 uint8_t reply[5] = {'p', 'o', 'n', 'g', packetcnt};
-                fmt_reply(lbuffer, packet->source, reply, 5);
+                fmt_packet(lbuffer, packet->source, MYADDRESS, reply, 5);
                 send_reply(lbuffer);
             }
             else if (packet->source == 0x00 &&
@@ -115,7 +94,7 @@ int main(int argc, char *argv[]) {
             else if (memcmp(payload, "get_status", strlen("get_status")) == 0) {
                 DBG("status was requested\r\n");
                 /* increase packet count by one */
-                fmt_reply(rbuffer, 50, "ready", 5);
+                fmt_packet(rbuffer, 50, MYADDRESS, "ready", 5);
                 packetcnt++;
             }
 

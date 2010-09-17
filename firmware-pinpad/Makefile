@@ -26,7 +26,10 @@ uart.o: ../lib/uart.c
 uart2.o: ../lib/uart2.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-firmware.hex: main.o uart.o uart2.o
+bus.o: ../lib/bus.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+firmware.hex: main.o uart.o uart2.o bus.o
 	$(CC) -mmcu=atmega644p -o $(shell basename $@ .hex).bin $^
 	avr-objcopy -O ihex -R .eeprom $(shell basename $@ .hex).bin $@
 	avr-size --mcu=${MCU} -C $(shell basename $@ .hex).bin
