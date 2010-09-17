@@ -40,6 +40,9 @@ void transmit_packet(void)
         return;
     }
 
+    /* disable multicast packets to not receive our broadcast packets again */
+    write_control_register(REG_ERXFCON, _BV(UCEN));
+
     uint16_t start_pointer = TXBUFFER_START;
 
     /* set send control registers */
@@ -68,4 +71,7 @@ void transmit_packet(void)
 
     /* transmit packet */
     bit_field_set(REG_ECON1, _BV(ECON1_TXRTS));
+
+    /* re-enable multicast packets */
+    write_control_register(REG_ERXFCON, _BV(BCEN) | _BV(MCEN) | _BV(UCEN));
 }
