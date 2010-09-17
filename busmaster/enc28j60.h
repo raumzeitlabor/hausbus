@@ -321,6 +321,8 @@ void init_enc28j60(void);
 void enc28j60_periodic(void);
 void noinline switch_bank(uint8_t bank);
 void network_config_load(void);
+
+void network_process(void);
 void transmit_packet(void);
 
 #ifdef DEBUG_ENC28J60
