@@ -183,6 +183,7 @@ void packet_done() {
 void skip_byte() {
     uartread = (uartread + 1) & (UARTBUF - 1);
 
+    status = BUS_STATUS_IDLE;
     check_complete();
 }
 
