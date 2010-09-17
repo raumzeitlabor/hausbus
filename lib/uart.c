@@ -2,6 +2,7 @@
  * vim:ts=4:sw=4:expandtab
  */
 #include <avr/io.h>
+#include <avr/wdt.h>
 #include <avr/interrupt.h>
 #define BAUD 9600
 #include <util/setbaud.h>
@@ -130,8 +131,11 @@ ISR(USART0_RX_vect) {
     /* Calculate next uartwrite position. The bitwise and will make it wrap. */
     uint8_t next = (uartwrite + 1) & (UARTBUF - 1);
     if (next == uartread) {
-        errflag = 'f';
         /* ringbuffer overflow, we cannot store that much */
+        wdt_disable();
+        wdt_enable(WDTO_15MS);
+        while (1)
+            ;
         return;
     }
 
