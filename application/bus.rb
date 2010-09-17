@@ -53,7 +53,7 @@ class Hausbus
       throw "You need to call set_interface first"
     end
     sock = UDPSocket.new(Socket::AF_INET6)
-    optval = IPAddr.new("[ff02::b5:#{num}]").hton + [@index].pack('i')
+    optval = IPAddr.new("[ff02::b5:#{num.to_s(16)}]").hton + [@index].pack('i')
     sock.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_JOIN_GROUP, optval)
     sock.bind("::", 41999)
     @sockets += [ { "fd" => sock, "block" => block } ]
@@ -65,7 +65,7 @@ class Hausbus
   ##
   def send(num, msg)
     sock = UDPSocket.new(Socket::AF_INET6)
-    sock.connect("fe80::b5:ff:fe00:#{num}%#{@interface}", 41999)
+    sock.connect("fe80::b5:ff:fe00:#{num.to_s(16)}%#{@interface}", 41999)
     sock.send msg, 0
     sock.close
   end
