@@ -76,8 +76,9 @@ static void finish_icmpv6_reply(uint8_t *ip6) {
 }
 
 static bool handle_neighbor_sol() {
-    /* check if the packet was adressed to the IPv6mcast MAC */
-    if (memcmp_P(uip_recvbuf, PSTR("\x33\x33\xff\x00\x00\x00"), 6) != 0)
+    /* check if the packet was adressed to the IPv6mcast MAC (we ignore the
+     * last byte because we want to respond to the whole range) */
+    if (memcmp_P(uip_recvbuf, PSTR("\x33\x33\xff\x00\x00"), 5) != 0)
         return false;
 
     /* skip ethernet header */
