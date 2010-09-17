@@ -7,6 +7,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
+#include <avr/wdt.h>
 #include <util/delay.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -66,6 +67,11 @@ int main(int argc, char *argv[]) {
     /* enable LED so that the user knows the controller is active */
     DDRC = (1 << PC7);
     PORTC = (1 << PC7);
+
+    /* disable watchdog */
+    MCUSR &= ~(1 << WDRF);
+    WDTCSR &= ~(1 << WDE);
+    wdt_disable();
 
     net_init();
     uart2_init();
