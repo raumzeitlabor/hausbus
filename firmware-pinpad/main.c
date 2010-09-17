@@ -16,7 +16,6 @@
 
 #define DEBUG
 #ifdef DEBUG
-  /* TODO: pgmspace benutzen für die strings */
   #define DBG(x) uart2_puts_P(PSTR(x))
 #else
   #define DBG(x) (void)0
@@ -34,7 +33,6 @@ static void fmt_reply(uint8_t *buffer, uint8_t destination, void *payload, uint8
     struct buspkt *reply = (struct buspkt*)buffer;
     uint8_t *payback = buffer;
     payback += sizeof(struct buspkt);
-    /* send pong packet */
     reply->destination = destination;
     reply->source = MYADDRESS;
     reply->length_hi = 0;
