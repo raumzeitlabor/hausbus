@@ -14,7 +14,7 @@
 /* used to copy the old contents of uip_buf */
 static uint8_t saved[59];
 
-static const char mymac[6] PROGMEM = "\x02\xb5\x00\x00\x00\x01";
+static const char mymac[6] PROGMEM = "\x02\xb5\x00\x00\x00\x00";
 
 static uint16_t chksum(uint16_t sum, const uint8_t *data, uint16_t len)
 {

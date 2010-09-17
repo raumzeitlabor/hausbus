@@ -328,7 +328,7 @@ void init_enc28j60(void)
     write_control_register(REG_MAADR3, 0x00);
     write_control_register(REG_MAADR2, 0x00);
     write_control_register(REG_MAADR1, 0x00);
-    write_control_register(REG_MAADR0, 0x01);
+    write_control_register(REG_MAADR0, 0x00);
 
     /* receive broadcast, multicast and unicast packets */
     write_control_register(REG_ERXFCON, _BV(BCEN) | _BV(MCEN) | _BV(UCEN));
