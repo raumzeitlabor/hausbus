@@ -115,7 +115,7 @@ ISR(USART0_RX_vect) {
     usr = UCSR0A;
     data = UDR0;
 
-    if (is_addr) {
+    if (is_addr && data == MYADDRESS) {
         UCSR0A &= ~(1 << MPCM0);
     }
 
