@@ -34,14 +34,6 @@ void transmit_packet(void)
     while (read_control_register(REG_ECON1) & _BV(ECON1_TXRTS) && timeout-- > 0);
 
     if (timeout == 0) {
-
-	    int c;
-            char *str = "timeout\r\n";
-        for (c = 0; c < strlen(str); c++) {
-            while ( !( UCSR0A & (1<<UDRE0)) );
-            UDR0 = (unsigned char)str[c];
-        }
-
 #if 0
         debug_printf("net: timeout waiting for TXRTS, aborting transmit!\n");
 #endif
@@ -66,18 +58,7 @@ void transmit_packet(void)
     /* write data */
     for (uint16_t i = 0; i < uip_len; i++) {
         write_buffer_memory(uip_buf[i]);
-#if 0
-            while ( !( UCSR0A & (1<<UDRE0)) );
-            UDR0 = uip_buf[i];
-#endif
     }
-#if 0
-    str = "end";
-        for (c = 0; c < strlen(str); c++) {
-            while ( !( UCSR0A & (1<<UDRE0)) );
-            UDR0 = (unsigned char)str[c];
-        }
-#endif
 
 #   ifdef ENC28J60_REV4_WORKAROUND
     /* reset transmit hardware, see errata #12 */
