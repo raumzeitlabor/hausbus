@@ -63,15 +63,6 @@ void transmit_packet(void)
     /* write override byte */
     write_buffer_memory(0);
 
-    int c;
-    char *str = "start";
-#if 0
-        for (c = 0; c < strlen(str); c++) {
-            while ( !( UCSR0A & (1<<UDRE0)) );
-            UDR0 = (unsigned char)str[c];
-        }
-#endif
-
     /* write data */
     for (uint16_t i = 0; i < uip_len; i++) {
         write_buffer_memory(uip_buf[i]);
