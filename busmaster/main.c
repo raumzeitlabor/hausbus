@@ -11,6 +11,7 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 
+#include "spi.h"
 #include "enc28j60.h"
 #include "bus.h"
 #include "compat.h"
