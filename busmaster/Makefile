@@ -24,7 +24,7 @@ all: firmware.hex
 uart.o: ../lib/uart.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-firmware.hex: main.o spi.o enc28j60.o enc28j60_process.o enc28j60_transmit.o uart.o
+firmware.hex: main.o spi.o enc28j60.o enc28j60_process.o enc28j60_transmit.o uart.o icmpv6.o
 	$(CC) $(CFLAGS) -o $(shell basename $@ .hex).bin $^
 	avr-objcopy -O ihex -R .eeprom $(shell basename $@ .hex).bin $@
 	avr-size --mcu=${MCU} -C $(shell basename $@ .hex).bin
