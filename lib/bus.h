@@ -26,8 +26,12 @@ void send_packet(struct buspkt *pkt);
 void net_init();
 
 uint8_t bus_status();
+void skip_byte();
+void packet_done();
 
 /* TODO: move */
 void uart_puts(char *str);
+
+void fmt_packet(uint8_t *buffer, uint8_t destination, uint8_t source, void *payload, uint8_t len);
 
 #endif
