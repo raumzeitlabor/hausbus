@@ -140,9 +140,11 @@ ISR(USART0_RX_vect) {
 
     check_complete();
 
+#ifndef BUSMASTER
     /* After the message was received, we switch back to MPCPU mode */
     if (status == BUS_STATUS_MESSAGE)
         UCSR0A |= (1 << MPCM0);
+#endif
 }
 
 /*
@@ -228,8 +230,10 @@ void net_init() {
     UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
     UCSR0B |= (1 << UCSZ02);
 
+#ifndef BUSMASTER
     /* enable multi-cpu */
     UCSR0A |= (1 << MPCM0);
+#endif
 
     /* set driver enable for RS485 as output */
     RS485_DE_DDR |= (1 << RS485_DE_PIN);
