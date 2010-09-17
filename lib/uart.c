@@ -154,6 +154,8 @@ ISR(USART0_RX_vect) {
 struct buspkt *current_packet() {
     uint8_t next = uartread;
     uint16_t c, length = packet_length();
+    if (length > 32)
+        length = 32;
     for (c = 0; c < length; c++) {
         packet[c] = uartbuf[next];
         next = (next + 1) & (UARTBUF - 1);
