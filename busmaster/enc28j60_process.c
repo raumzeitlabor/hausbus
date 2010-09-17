@@ -21,6 +21,8 @@
  */
 
 #include <string.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <avr/pgmspace.h>
 
 #include "enc28j60.h"
@@ -39,6 +41,29 @@
 /* prototypes */
 void process_packet(void);
 
+//#define DEBUG_INTERRUPT
+//#define DEBUG
+
+#ifdef DEBUG
+static void debug_printf(const char *fmt, ...) {
+	char buf[64];
+	va_list ap;
+
+	va_start(ap, fmt);
+
+	vsnprintf_P(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+	char *walk;
+	for (walk = buf; *walk != '\0'; walk++) {
+		while ( !( UCSR0A & (1<<UDRE0)) );
+		UDR0 = (unsigned char)*walk;
+	}
+        while ( !( UCSR0A & (1<<UDRE0)) );
+	UDR0 = '\r';
+        while ( !( UCSR0A & (1<<UDRE0)) );
+	UDR0 = '\n';
+}
+#endif
 
 
 void network_process(void)
@@ -72,17 +97,17 @@ void network_process(void)
     /* check if some interrupts occured */
     if (EIR != 0) {
 
-        debug_printf("net: controller interrupt, EIR = 0x%02x\n", EIR);
+        debug_printf(PSTR("net: controller interrupt, EIR = 0x%02x"), EIR);
         if (EIR & _BV(LINKIF))
-            debug_printf("\t* Link\n");
+            debug_printf(PSTR("\t* Link\n"));
         if (EIR & _BV(TXIF))
-            debug_printf("\t* Tx\n");
+            debug_printf(PSTR("\t* Tx\n"));
         if (EIR & _BV(PKTIF))
-            debug_printf("\t* Pkt\n");
+            debug_printf(PSTR("\t* Pkt\n"));
         if (EIR & _BV(RXERIF))
-            debug_printf("\t* rx error\n");
+            debug_printf(PSTR("\t* rx error\n"));
         if (EIR & _BV(TXERIF))
-            debug_printf("\t* tx error\n");
+            debug_printf(PSTR("\t* tx error\n"));
     }
 #endif
 
@@ -118,7 +143,7 @@ void network_process(void)
         uint8_t ESTAT = read_control_register(REG_ESTAT);
 
         if (ESTAT & _BV(TXABRT))
-            debug_printf("net: packet transmit failed\n");
+            debug_printf(PSTR("net: packet transmit failed\n"));
 #endif
         /* clear flags */
         bit_field_clear(REG_EIR, _BV(TXIF));
@@ -140,7 +165,9 @@ void network_process(void)
 
     /* receive error */
     if (EIR & _BV(RXERIF)) {
-        //debug_printf("net: receive error!\n");
+#ifdef DEBUG
+        debug_printf(PSTR("net: receive error!\n"));
+#endif
 
         bit_field_clear(REG_EIR, _BV(RXERIF));
 
@@ -153,7 +180,7 @@ void network_process(void)
     /* transmit error */
     if (EIR & _BV(TXERIF)) {
 #ifdef DEBUG
-        debug_printf("net: transmit error!\n");
+        debug_printf(PSTR("net: transmit error!\n"));
 #endif
 
         bit_field_clear(REG_EIR, _BV(TXERIF));
@@ -169,13 +196,6 @@ void process_packet(void)
     /* if there is a packet to process */
     if (read_control_register(REG_EPKTCNT) == 0)
         return;
-
-int c;
-     char *str = "received packet\r\n";
-        for (c = 0; c < strlen(str); c++) {
-            while ( !( UCSR0A & (1<<UDRE0)) );
-            UDR0 = (unsigned char)str[c];
-        }
 
     /* read next packet pointer */
     set_read_buffer_pointer(enc28j60_next_packet_pointer);
@@ -196,14 +216,13 @@ int c;
             || rpv.received_packet_size < 14
             || rpv.received_packet_size > UIP_BUFSIZE) {
 #       ifdef DEBUG
-        debug_printf("net: packet too large or too small for an "
-		     "ethernet header: %d\n", rpv.received_packet_size);
+        debug_printf(PSTR("net: packet too large or too small for an "
+		     "ethernet header: %d\n"), rpv.received_packet_size);
 #       endif
 	goto skip;
         return;
     }
 
-#if 0
     /* read packet */
     p = uip_recvbuf;
     for (uint16_t i = 0; i < rpv.received_packet_size; i++)
