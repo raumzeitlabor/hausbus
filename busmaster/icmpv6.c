@@ -75,8 +75,7 @@ static void finish_icmpv6_reply(uint8_t *ip6) {
 
 static bool handle_neighbor_sol() {
     /* check if the packet was adressed to the IPv6mcast MAC */
-    //if (memcmp_P(uip_recvbuf, PSTR("\x33\x33\xff\x00\x00\x00"), 6) != 0)
-    if (memcmp(uip_recvbuf, "\x33\x33\xff\x00\x00\x00", 6) != 0)
+    if (memcmp_P(uip_recvbuf, PSTR("\x33\x33\xff\x00\x00\x00"), 6) != 0)
         return false;
 
     /* skip ethernet header */
@@ -107,13 +106,7 @@ static bool handle_neighbor_sol() {
     uip_buf[78] = 0x02;
     uip_buf[79] = 0x01; /* length: 8 byte */
     /* local address */
-    uip_buf[80] = 0x02;
-    uip_buf[81] = 0xb5;
-    uip_buf[82] = 0x00;
-    uip_buf[83] = 0x00;
-    uip_buf[84] = 0x00;
-    uip_buf[85] = 0x01;
-    //memcpy_P(uip_buf + 80, mymac, 6);
+    memcpy_P(uip_buf + 80, mymac, 6);
     /* length */
     uip_buf[19] = 32;
 
