@@ -9,6 +9,18 @@
 
 #include "bus.h"
 
+#ifdef BUSMASTER
+    /* etherrape board */
+    #define RS485_DE_DDR    DDRC
+    #define RS485_DE_PORT   PORTC
+    #define RS485_DE_PIN    PC2
+#else
+    /* hausbus-644 board */
+    #define RS485_DE_DDR    DDRD
+    #define RS485_DE_PORT   PORTD
+    #define RS485_DE_PIN    PD4
+#endif
+
 /* simple ringbuffer */
 #define UARTBUF 32
 
@@ -17,6 +29,9 @@ static volatile uint8_t uartwrite = 0;
 static volatile uint8_t uartread = 0;
 static volatile uint8_t errflag = 0;
 static volatile uint8_t status = BUS_STATUS_IDLE;
+
+static uint8_t *txwalk;
+uint8_t txcnt;
 
 /* contains a non-wrapping copy of the current packet */
 static uint8_t packet[UARTBUF];
@@ -163,7 +178,39 @@ void packet_done() {
     check_complete();
 }
 
+void skip_byte() {
+    uartread = (uartread + 1) & (UARTBUF - 1);
+
+    check_complete();
+}
+
+ISR(USART0_UDRE_vect) {
+    if (txcnt == 0) {
+        RS485_DE_PORT &= ~(1 << RS485_DE_PIN);
+        //UCSR0B &= ~(1 << TXCIE0);
+        UCSR0B &= ~(1 << UDRIE0);
+    } else {
+        UCSR0B &= ~(1 << TXB80);
+        UDR0 = *txwalk++;
+        --txcnt;
+    }
+}
+
 void send_packet(struct buspkt *pkt) {
+    /* initialize pointer / length counter */
+    txwalk = (uint8_t*)pkt;
+    txcnt = sizeof(struct buspkt) + pkt->length_lo;
+
+    /* activate driver enable */
+    RS485_DE_PORT |= (1 << RS485_DE_PIN);
+
+    /* write first byte */
+    UCSR0B |= (1 << TXB80);
+    UDR0 = *txwalk++;
+
+    /* activate interrupt */
+    //UCSR0B |= (1 << TXCIE0);
+    UCSR0B |= (1 << UDRIE0);
 }
 
 void net_init() {
@@ -180,6 +227,10 @@ void net_init() {
 
     /* enable multi-cpu */
     UCSR0A |= (1 << MPCM0);
+
+    /* set driver enable for RS485 as output */
+    RS485_DE_DDR |= (1 << RS485_DE_PIN);
+    RS485_DE_PORT &= ~(1 << RS485_DE_PIN);
 
     /* Enable interrupts */
     /* TODO: move this into the main code for each controller */
