@@ -323,12 +323,12 @@ void init_enc28j60(void)
     write_control_register(REG_MAMXFLH, HI8(NET_MAX_FRAME_LENGTH + 4));
 
     /* program the local mac address */
-    write_control_register(REG_MAADR5, 0xAC);
-    write_control_register(REG_MAADR4, 0xDE);
-    write_control_register(REG_MAADR3, 0x48);
-    write_control_register(REG_MAADR2, 0xFD);
-    write_control_register(REG_MAADR1, 0x0F);
-    write_control_register(REG_MAADR0, 0xD0);
+    write_control_register(REG_MAADR5, 0x02);
+    write_control_register(REG_MAADR4, 0xb5);
+    write_control_register(REG_MAADR3, 0x00);
+    write_control_register(REG_MAADR2, 0x00);
+    write_control_register(REG_MAADR1, 0x00);
+    write_control_register(REG_MAADR0, 0x01);
 
     /* receive broadcast, multicast and unicast packets */
     write_control_register(REG_ERXFCON, _BV(BCEN) | _BV(MCEN) | _BV(UCEN));
