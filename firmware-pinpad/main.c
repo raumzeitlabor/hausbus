@@ -28,6 +28,8 @@
   #define DBG(x) (void)0
 #endif
 
+enum { LOCKED_PERFECT = 0, LOCKED_OPEN, NOT_LOCKED } lock_state_t;
+
 /* seite 84 */
 static char pin[11];
 static uint8_t pincnt = 0;
@@ -37,6 +39,10 @@ static volatile uint8_t sercnt = 0;
 static uint8_t packetcnt = 0;
 static uint8_t lbuffer[32];
 
+static uint8_t old_pinb[10];
+static uint8_t op_current = 0;
+static uint16_t check_pinb = 0;
+
 /* Outgoing packet buffer. The message header size is 6 bytes, let's assume a
  * typical message length of 12 bytes. Thereforce, we can fit about 28 messages
  * into this buffer. It will be cleared every second. */
@@ -45,20 +51,73 @@ static struct buspkt_10 rbuffer[32];
 static uint8_t rb_current = 0;
 static uint8_t rb_next = 0;
 
+static uint8_t get_state() {
+    bool pb2 = (PINB & (1 << PB2));
+    bool pb3 = (PINB & (1 << PB3));
+    bool pb4 = (PINB & (1 << PB4));
+
+    if (!pb2 && pb3 && !pb4)
+        return LOCKED_PERFECT;
+    else if (pb2 && !pb3 && pb4)
+        return NOT_LOCKED;
+    else return LOCKED_OPEN;
+}
+
 /*
  * Tries to send a message to message group 50 from MYADDRESS
  *
  */
-bool sendmsg(const char *msg) {
+static bool senddata(const char *msg, int len) {
     /* If the packet which is next to be fetched (rb_next) is at the same
      * position where we want to write to, we have to abort */
     if (((rb_current + 1) % 32) == rb_next)
         return false;
 
-    fmt_packet(&rbuffer[rb_current], 50, MYADDRESS, msg, strlen(msg));
+    fmt_packet((uint8_t*)&rbuffer[rb_current], 50, MYADDRESS, (void*)msg, len);
     rb_current = (rb_current + 1) % 32;
     packetcnt++;
     return true;
+}
+
+static bool sendmsg(const char *msg) {
+    return senddata(msg, strlen(msg));
+}
+
+static void send_state() {
+    bool pb2 = (PINB & (1 << PB2));
+    bool pb3 = (PINB & (1 << PB3));
+    bool pb4 = (PINB & (1 << PB4));
+    char msg[] = "SRAW abc";
+    msg[5] = pb2;
+    msg[6] = pb3;
+    msg[7] = pb4;
+    senddata(msg, 8);
+    if (pb3 && !pb4)
+        sendmsg("STAT lock");
+    else if (!pb3 && pb4)
+        sendmsg("STAT open");
+    else sendmsg("STAT broke");
+}
+
+void lock_door() {
+    PORTA &= ~(1 << PA3);
+    _delay_ms(500);
+    PORTA |= (1 << PA3);
+
+    /* laut piepsen */
+    //if (get_state() != LOCKED_PERFECT) {
+       // uart2_puts("^BEEP 2 $\n");
+       // _delay_ms(500);
+       // uart2_puts("^BEEP 2 $\n");
+
+        uart2_puts("^LED 2 2$\n");
+    //}
+}
+
+void unlock_door() {
+    PORTA &= ~(1 << PA2);
+    _delay_ms(500);
+    PORTA |= (1 << PA2);
 }
 
 ISR(USART1_RX_vect) {
@@ -95,32 +154,31 @@ static void handle_command(const char *buffer) {
             msg[strlen(msg)-1] = c;
             sendmsg(msg);
         }
-        uart2_puts("^LED 2 1$\n");
-        uart2_puts("^BEEP 1 $\n");
-        char *str;
+        if (c != '#') {
+            uart2_puts("^LED 2 1$\n");
+            uart2_puts("^BEEP 1 $\n");
+        }
         if (pincnt == 7 && strncmp(pin, "777#", 5) == 0) {
             uart2_puts("^LED 2 2$");
             uart2_puts("^BEEP 2 $\n");
             pincnt = 0;
             memset(pin, '\0', sizeof(pin));
-            PORTA &= ~(1 << PA2);
-            _delay_ms(500);
-            PORTA |= (1 << PA2);
+            unlock_door();
+            sendmsg("OPEN pin");
         } else if (pincnt == 4 && strncmp(pin, "666#", 5) == 0) {
             uart2_puts("^LED 2 2$");
             uart2_puts("^BEEP 2 $\n");
             pincnt = 0;
             memset(pin, '\0', sizeof(pin));
-            PORTA &= ~(1 << PA3);
-            _delay_ms(500);
-            PORTA |= (1 << PA3);
+            lock_door();
+            sendmsg("LOCK pin");
         } else if (c == '#') {
             uart2_puts("^LED 1 2$^BEEP 2 $");
             //uart2_puts("^BEEP 2 $\n");
             pincnt = 0;
             memset(pin, '\0', sizeof(pin));
+            sendmsg("DISCARD");
         }
-
     }
 }
 
@@ -156,6 +214,10 @@ int main(int argc, char *argv[]) {
     DDRA = (1 << PA2) | (1 << PA3);
     PORTA = (1 << PA2) | (1 << PA3);
 
+    /* set pins for status */
+    DDRB = 0;
+    PORTB = (1 << PB2) | (1 << PB3) | (1 << PB4);
+
     /* init serial line to the pinpad frontend */
     UBRR1H = UBRRH_VALUE;
     UBRR1L = UBRRL_VALUE;
@@ -173,15 +235,34 @@ int main(int argc, char *argv[]) {
     PORTC = (1 << PC7);
 
     DBG("Pinpad firmware booted.\r\n\r\n");
-    char *str = "^AEEP 1 $\n";
-    int c;
+    uint8_t c;
+    bool pinb_changed;
     while (1) {
-
+        /* Handle serial input */
         if (serbuf[8] == '$') {
-            strncpy(bufcopy, serbuf, sizeof(bufcopy));
+            strncpy(bufcopy, (const char*)serbuf, sizeof(bufcopy));
             serbuf[8] = '\0';
 
             handle_command(bufcopy);
+        }
+
+        /* Check if the sensors have changed */
+        if (check_pinb++ == 0) {
+            pinb_changed = true;
+            for (c = 0; c < 10; c++) {
+                if (c != op_current && old_pinb[c] != PINB) {
+                    pinb_changed = false;
+                    break;
+                }
+            }
+            if (old_pinb[op_current] == PINB)
+                pinb_changed = false;
+
+            old_pinb[op_current] = PINB;
+            op_current = (op_current + 1) % 10;
+
+            if (pinb_changed)
+                send_state();
         }
 
         //_delay_ms(100);
@@ -211,27 +292,21 @@ int main(int argc, char *argv[]) {
                 memcmp(payload, "send", strlen("send")) == 0) {
 
                 DBG("cached message was sent\r\n");
-                send_reply(&rbuffer[rb_next]);
+                send_reply((uint8_t*)&rbuffer[rb_next]);
                 rb_next = (rb_next + 1) % 32;
                 packetcnt--;
 
                 _delay_ms(25);
             }
             else if (memcmp(payload, "open", strlen("open")) == 0) {
-                PORTA &= ~(1 << PA2);
-                _delay_ms(500);
-                PORTA |= (1 << PA2);
+                unlock_door();
+                sendmsg("OPEN bus");
             }
             else if (memcmp(payload, "close", strlen("close")) == 0) {
-                PORTA &= ~(1 << PA3);
-                _delay_ms(500);
-                PORTA |= (1 << PA3);
-            }
-            else if (memcmp(payload, "get_status", strlen("get_status")) == 0) {
-                DBG("status was requested\r\n");
-                /* increase packet count by one */
-                fmt_packet(rbuffer, 50, MYADDRESS, "ready", 5);
-                packetcnt++;
+                lock_door();
+                sendmsg("LOCK bus");
+            } else if (memcmp(payload, "status", strlen("status")) == 0) {
+                send_state();
             }
 
             packet_done();
