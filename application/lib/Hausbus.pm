@@ -9,7 +9,7 @@ use AnyEvent::Handle;
 use v5.10;
 
 has '_socket' => (is => 'rw', isa => 'IO::Socket::Multicast6', default => undef);
-has '_handle' => (is => 'rw', isa => 'AnyEvent::Handle', default => undef);
+has '_io' => (is => 'rw', isa => 'Ref', default => undef);
 has 'on_read' => (is => 'rw', isa => 'CodeRef', default => undef);
 has 'group' => (is => 'ro', isa => 'Int', required => 1);
 
@@ -25,24 +25,22 @@ sub BUILD {
 
   $self->_socket($s);
 
-  my $handle;
-  $handle = AnyEvent::Handle->new(
-      fh => $s,
-      on_error => sub {
-          say "error";
-      },
-      on_read => sub {
-        return [] unless length($_[0]->rbuf) > 0;
+  my $io;
+  $io = AnyEvent->io(
+        fh => $s,
+        poll => "r",
+        cb => sub {
         if (!defined($self->on_read)) {
-          $_[0]->rbuf = "";
           return;
         }
 
+        my $buffer;
+        $s->recv($buffer, 256);
+
         # TODO: find out sender
-        $self->on_read->(undef, $_[0]->rbuf);
-        $_[0]->rbuf = '';
+        $self->on_read->(undef, $buffer);
       });
-  $self->_handle($handle);
+  $self->_io($io);
 }
 
 sub send {
