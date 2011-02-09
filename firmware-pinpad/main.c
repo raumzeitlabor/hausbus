@@ -1,5 +1,8 @@
 /*
  * vim:ts=4:sw=4:expandtab
+ *
+ * ATmega644P (4096 Bytes SRAM)
+ *
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,7 +36,30 @@ static volatile uint8_t sercnt = 0;
 
 static uint8_t packetcnt = 0;
 static uint8_t lbuffer[32];
-static uint8_t rbuffer[32];
+
+/* Outgoing packet buffer. The message header size is 6 bytes, let's assume a
+ * typical message length of 12 bytes. Thereforce, we can fit about 28 messages
+ * into this buffer. It will be cleared every second. */
+buspkt_full(10);
+static struct buspkt_10 rbuffer[32];
+static uint8_t rb_current = 0;
+static uint8_t rb_next = 0;
+
+/*
+ * Tries to send a message to message group 50 from MYADDRESS
+ *
+ */
+bool sendmsg(const char *msg) {
+    /* If the packet which is next to be fetched (rb_next) is at the same
+     * position where we want to write to, we have to abort */
+    if (((rb_current + 1) % 32) == rb_next)
+        return false;
+
+    fmt_packet(&rbuffer[rb_current], 50, MYADDRESS, msg, strlen(msg));
+    rb_current = (rb_current + 1) % 32;
+    packetcnt++;
+    return true;
+}
 
 ISR(USART1_RX_vect) {
     uint8_t byte;
@@ -58,23 +84,16 @@ ISR(USART1_RX_vect) {
         sercnt = 0;
 }
 
-#if 0
-static void uart2_puts(const char *str) {
-    int c;
-
-    for (c = 0; c < strlen(str); c++) {
-        while ( !( UCSR1A & (1<<UDRE1)) );
-        UDR1 = (unsigned char)str[c];
-    }
-}
-#endif
-
 static void handle_command(const char *buffer) {
     if (strncmp(buffer, "^PAD ", strlen("^PAD ")) == 0) {
         char c = buffer[5];
         if (pincnt < 10) {
             pin[pincnt] = c;
             pincnt++;
+
+            char msg[] = "KEY x";
+            msg[strlen(msg)-1] = c;
+            sendmsg(msg);
         }
         uart2_puts("^LED 2 1$\n");
         uart2_puts("^BEEP 1 $\n");
@@ -192,10 +211,21 @@ int main(int argc, char *argv[]) {
                 memcmp(payload, "send", strlen("send")) == 0) {
 
                 DBG("cached message was sent\r\n");
-                send_reply(rbuffer);
+                send_reply(&rbuffer[rb_next]);
+                rb_next = (rb_next + 1) % 32;
+                packetcnt--;
 
                 _delay_ms(25);
-                packetcnt--;
+            }
+            else if (memcmp(payload, "open", strlen("open")) == 0) {
+                PORTA &= ~(1 << PA2);
+                _delay_ms(500);
+                PORTA |= (1 << PA2);
+            }
+            else if (memcmp(payload, "close", strlen("close")) == 0) {
+                PORTA &= ~(1 << PA3);
+                _delay_ms(500);
+                PORTA |= (1 << PA3);
             }
             else if (memcmp(payload, "get_status", strlen("get_status")) == 0) {
                 DBG("status was requested\r\n");
