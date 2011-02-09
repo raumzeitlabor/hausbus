@@ -17,9 +17,15 @@
     #define RS485_DE_PIN    PC2
 #else
     /* hausbus-644 board */
+    #ifdef __AVR_ATmega644__
     #define RS485_DE_DDR    DDRD
     #define RS485_DE_PORT   PORTD
     #define RS485_DE_PIN    PD4
+    #else
+    #define RS485_DE_DDR    DDRD
+    #define RS485_DE_PORT   PORTD
+    #define RS485_DE_PIN    PD2
+    #endif
 #endif
 
 /* simple ringbuffer */
@@ -36,12 +42,23 @@ uint8_t txcnt;
 
 /* contains a non-wrapping copy of the current packet */
 static uint8_t packet[UARTBUF];
+static void uart2_puts(char *str) {
+#ifndef NO_UART2
+#ifndef BUSMASTER
+    char *walk;
+    for (walk = str; *walk != '\0'; walk++) {
+        while ( !( UCSR1A & (1<<UDRE1)) );
+        UDR1 = (unsigned char)*walk;
+    }
+#endif
+#endif
+}
 
 /*
  * Returns the number of bytes waiting in the ringbuffer
  *
  */
-static uint8_t bytes_waiting() {
+uint8_t bytes_waiting() {
     if (uartread == uartwrite)
         return 0;
 
@@ -59,7 +76,7 @@ static uint8_t bytes_waiting() {
  * the ringbuffer (uartbuf).
  *
  */
-static uint16_t packet_length() {
+uint16_t packet_length() {
     if (bytes_waiting() < sizeof(struct buspkt))
         return 0xfe;
 
@@ -104,10 +121,23 @@ static void check_complete() {
 }
 
 uint8_t bus_status() {
+    check_complete();
     return status;
 }
 
+uint8_t get_uartread() {
+    return uartread;
+}
+uint8_t get_uartwrite() {
+    return uartwrite;
+}
+
+
+#ifdef __AVR_ATmega644__
 ISR(USART0_RX_vect) {
+#else
+ISR(USART_RX_vect) {
+#endif
     uint8_t usr;
     uint8_t data;
     uint8_t is_addr;
@@ -124,6 +154,13 @@ ISR(USART0_RX_vect) {
     if (usr & (1 << DOR0) ||
         usr & (1 << UPE0) ||
         usr & (1 << FE0)) {
+        uart2_puts("recv error\r\n");
+        if (usr & (1 << DOR0))
+            uart2_puts("DOR0\r\n");
+        if (usr & (1 << UPE0))
+            uart2_puts("UPE0\r\n");
+        if (usr & (1 << FE0))
+            uart2_puts("FE0\r\n");
         errflag = 'E';
         return;
     }
@@ -178,6 +215,7 @@ struct buspkt *current_packet() {
 void packet_done() {
     uint16_t length = packet_length();
     while (length > 0) {
+        uartbuf[uartread] = 0x01;
         uartread = (uartread + 1) & (UARTBUF-1);
         length--;
     }
@@ -193,11 +231,15 @@ void skip_byte() {
     check_complete();
 }
 
-ISR(USART0_UDRE_vect) {
+#ifdef __AVR_ATmega644__
+ISR(USART0_TX_vect) {
+#else
+ISR(USART_TX_vect) {
+#endif
     if (txcnt == 0) {
         RS485_DE_PORT &= ~(1 << RS485_DE_PIN);
-        //UCSR0B &= ~(1 << TXCIE0);
-        UCSR0B &= ~(1 << UDRIE0);
+        UCSR0B &= ~(1 << TXCIE0);
+        //UCSR0B &= ~(1 << UDRIE0);
     } else {
         UCSR0B &= ~(1 << TXB80);
         UDR0 = *txwalk++;
@@ -218,8 +260,8 @@ void send_packet(struct buspkt *pkt) {
     UDR0 = *txwalk++;
 
     /* activate interrupt */
-    //UCSR0B |= (1 << TXCIE0);
-    UCSR0B |= (1 << UDRIE0);
+    UCSR0B |= (1 << TXCIE0);
+    //UCSR0B |= (1 << UDRIE0);
 }
 
 void net_init() {
