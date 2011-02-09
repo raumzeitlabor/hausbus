@@ -128,7 +128,7 @@ static bool handle_echo_req() {
     uint8_t *ip6 = uip_recvbuf + 14;
 
     /* check if the packet was adressed to the IPv6 address of the busmaster */
-    if (memcmp_P(ip6 + 24, PSTR("\xFE\x80\x00\x00\x00\x00\x00\x00\x00\xb5\x00\xFF\xFE\x00\x00\x00"), 16) != 0)
+    if (memcmp_P(ip6 + 24, PSTR("\xFD\x1A\x56\xE6\x97\xE9\x00\x00\x00\xb5\x00\xFF\xFE\x00\x00\x00"), 16) != 0)
         return false;
 
     /* it’s icmpv6 */
@@ -138,6 +138,8 @@ static bool handle_echo_req() {
 
     /* generate echo reply */
     start_icmpv6_reply(ip6);
+    /* source address for pings */
+    uip_buf[37] = 0x00;
     memcpy(uip_buf + 22 + 16, ip6 + 8, 16); /* destination address */
     /* ICMPv6 */
     uip_buf[54] = 129; /* echo reply */
