@@ -17,7 +17,7 @@
     #define RS485_DE_PIN    PC2
 #else
     /* hausbus-644 board */
-    #ifdef __AVR_ATmega644__
+    #if defined(__AVR_ATmega644__) || (defined(MCU) && MCU == atmega644p)
     #define RS485_DE_DDR    DDRD
     #define RS485_DE_PORT   PORTD
     #define RS485_DE_PIN    PD4
@@ -133,7 +133,7 @@ uint8_t get_uartwrite() {
 }
 
 
-#ifdef __AVR_ATmega644__
+#if defined(__AVR_ATmega644__) || (defined(MCU) && MCU == atmega644p)
 ISR(USART0_RX_vect) {
 #else
 ISR(USART_RX_vect) {
@@ -231,7 +231,7 @@ void skip_byte() {
     check_complete();
 }
 
-#ifdef __AVR_ATmega644__
+#if defined(__AVR_ATmega644__) || (defined(MCU) && MCU == atmega644p)
 ISR(USART0_TX_vect) {
 #else
 ISR(USART_TX_vect) {

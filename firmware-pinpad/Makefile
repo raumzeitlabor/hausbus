@@ -8,11 +8,13 @@ ADDRESS := 1
 CFLAGS += -Wall
 CFLAGS += -std=c99
 CFLAGS += -DF_CPU=${MHZ}
+CFLAGS += -DMCU=${MCU}
 CFLAGS += -mmcu=${MCU}
 CFLAGS += -Os
 
 CFLAGS += -I../lib
 CFLAGS += -DMYADDRESS=${ADDRESS}
+CFLAGS += -DNO_UART2
 
 #.SILENT:
 
