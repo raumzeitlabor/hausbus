@@ -29,6 +29,7 @@
 #endif
 
 enum { LOCKED_PERFECT = 0, LOCKED_OPEN, NOT_LOCKED } lock_state_t;
+volatile uint16_t pwmvalue;
 
 /* seite 84 */
 static char pin[11];
@@ -83,7 +84,45 @@ static bool sendmsg(const char *msg) {
     return senddata(msg, strlen(msg));
 }
 
+static void send_pwm_state(uint8_t new_state) {
+    uint8_t sensor1;
+    uint8_t sensor2;
+    uint8_t state;
+
+    /* Das letzte Bit gibt den Status von Sensor 2 an */
+    sensor2 = (new_state & (1 << 0));
+    /* Das vorletzte Bit den Status von Sensor 1 */
+    sensor1 = (new_state & (1 << 1));
+    /* Das dritte und vierte Bit geben den Aktionscode an */
+    state = (new_state & ((1 << 2) | (1 << 3))) >> 2;
+    char msg[] = "SRAW aabc";
+    msg[5] = (new_state & (1 << 3));
+    msg[6] = (new_state & (1 << 2));
+    msg[7] = sensor1;
+    msg[8] = sensor2;
+    senddata(msg, 9);
+    if (sensor1 && !sensor2)
+        sendmsg("STAT lock");
+        /* locked */
+    else if (!sensor1 && sensor2)
+        sendmsg("STAT open");
+    else sendmsg("STAT broke");
+}
+
 static void send_state() {
+    uint16_t snap = pwmvalue;
+    uint8_t c;
+    char buf[128];
+    for (c = 1; c < 17; c++) {
+        if (snap > ((3855 * c) - 500) &&
+            snap < ((3855 * c) + 500)) {
+            send_pwm_state(c);
+            return;
+        }
+    }
+    sendmsg("SRAW bork");
+
+#if 0
     bool pb2 = (PINB & (1 << PB2));
     bool pb3 = (PINB & (1 << PB3));
     bool pb4 = (PINB & (1 << PB4));
@@ -97,12 +136,24 @@ static void send_state() {
     else if (!pb3 && pb4)
         sendmsg("STAT open");
     else sendmsg("STAT broke");
+#endif
 }
 
 void lock_door() {
+    /* Ansteuerung des HomeTec++ */
+    int freq = 8 * 3855;
+    OCR1BH = (freq & 0xFF00) >> 8;
+    OCR1BL = (freq & 0x00FF);
+    _delay_ms(500);
+    freq = 1 * 3855;
+    OCR1BH = (freq & 0xFF00) >> 8;
+    OCR1BL = (freq & 0x00FF);
+#if 0
+    /* Direkte Ansteuerung des HomeTec */
     PORTA &= ~(1 << PA3);
     _delay_ms(500);
     PORTA |= (1 << PA3);
+#endif
 
     /* laut piepsen */
     //if (get_state() != LOCKED_PERFECT) {
@@ -115,9 +166,18 @@ void lock_door() {
 }
 
 void unlock_door() {
+    int freq = 4 * 3855;
+    OCR1BH = (freq & 0xFF00) >> 8;
+    OCR1BL = (freq & 0x00FF);
+    _delay_ms(500);
+    freq = 1 * 3855;
+    OCR1BH = (freq & 0xFF00) >> 8;
+    OCR1BL = (freq & 0x00FF);
+    /*
     PORTA &= ~(1 << PA2);
     _delay_ms(500);
     PORTA |= (1 << PA2);
+    */
 }
 
 ISR(USART1_RX_vect) {
@@ -141,6 +201,40 @@ ISR(USART1_RX_vect) {
 
     if (sercnt == 9)
         sercnt = 0;
+}
+
+volatile uint16_t lowvalue;
+volatile uint16_t highvalue;
+
+ISR(TIMER1_CAPT_vect) {
+    /* Schauen, bei welcher Flanke wir gerade sind */
+    TIMSK1 &= ~(1 << ICIE1);
+
+    /* Steigende Flanke */
+    if (TCCR1B & (1 << ICES1)) {
+        /* Wert wegspeichern */
+        lowvalue = ICR1L;
+        lowvalue |= (ICR1H << 8);
+
+        /* flanke ändern */
+        TCCR1B &= ~(1 << ICES1);
+    } else {
+        /* Fallende Flanke */
+        highvalue = ICR1L;
+        highvalue |= (ICR1H << 8);
+
+        /* Zählerüberlauf */
+        if (highvalue < lowvalue) {
+            pwmvalue = 0xFFFF - lowvalue + highvalue;
+        } else {
+            pwmvalue = highvalue - lowvalue;
+        }
+
+        /* flanke ändern */
+        TCCR1B |= (1 << ICES1);
+    }
+
+    TIMSK1 |= (1 << ICIE1);
 }
 
 static void handle_command(const char *buffer) {
@@ -172,6 +266,20 @@ static void handle_command(const char *buffer) {
             memset(pin, '\0', sizeof(pin));
             lock_door();
             sendmsg("LOCK pin");
+        } else if (pincnt == 5 && strncmp(pin, "0000#", 5) == 0) {
+
+            uart2_puts("^LED 2 2$");
+            uart2_puts("^BEEP 2 $\n");
+            pincnt = 0;
+            memset(pin, '\0', sizeof(pin));
+    int freq = 16 * 3855;
+    OCR1BH = (freq & 0xFF00) >> 8;
+    OCR1BL = (freq & 0x00FF);
+                sendmsg("reset PIN");
+                _delay_ms(250);
+    freq = 1 * 3855;
+    OCR1BH = (freq & 0xFF00) >> 8;
+    OCR1BL = (freq & 0x00FF);
         } else if (c == '#') {
             uart2_puts("^LED 1 2$^BEEP 2 $");
             //uart2_puts("^BEEP 2 $\n");
@@ -224,6 +332,21 @@ int main(int argc, char *argv[]) {
     UCSR1B = (1 << RXCIE1) | (1 << RXEN1) | (1 << TXEN1);
 
     UCSR1C = (1<<UCSZ10) | (1<<UCSZ11);
+
+    /* PWM zur Kommunikation mit dem HomeTec++ initialisieren */
+    DDRD |= (1 << PD4);
+    TCCR1A = (1 << COM1B1) | (1 << WGM11) | (1 << WGM10);
+    TCCR1B = (1 << ICNC1) | (1 << ICES1) | (1 << WGM13) | (1 << WGM12) | (1 << CS11) | (1 << CS10);
+    OCR1AH = 0xFF;
+    OCR1AL = 0xFF;
+    TCNT1H = 0;
+    TCNT1L = 0;
+
+    TIMSK1 = (1 << ICIE1);
+
+    int freq = 1 * 3855;
+    OCR1BH = (freq & 0xFF00) >> 8;
+    OCR1BL = (freq & 0x00FF);
 
     net_init();
 
@@ -305,6 +428,22 @@ int main(int argc, char *argv[]) {
             else if (memcmp(payload, "close", strlen("close")) == 0) {
                 lock_door();
                 sendmsg("LOCK bus");
+
+            } else if (memcmp(payload, "nop", strlen("nop")) == 0) {
+    int freq = 1 * 3855;
+    OCR1BH = (freq & 0xFF00) >> 8;
+    OCR1BL = (freq & 0x00FF);
+                sendmsg("NOP bus");
+            } else if (memcmp(payload, "reset", strlen("reset")) == 0) {
+
+    int freq = 16 * 3855;
+    OCR1BH = (freq & 0xFF00) >> 8;
+    OCR1BL = (freq & 0x00FF);
+                sendmsg("reset BUS");
+                _delay_ms(250);
+    freq = 1 * 3855;
+    OCR1BH = (freq & 0xFF00) >> 8;
+    OCR1BL = (freq & 0x00FF);
             } else if (memcmp(payload, "status", strlen("status")) == 0) {
                 send_state();
             }
