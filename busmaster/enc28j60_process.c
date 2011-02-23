@@ -219,7 +219,8 @@ void process_packet(void)
         debug_printf(PSTR("net: packet too large or too small for an "
 		     "ethernet header: %d\n"), rpv.received_packet_size);
 #       endif
-	goto skip;
+        init_enc28j60();
+	//goto skip;
         return;
     }
 
