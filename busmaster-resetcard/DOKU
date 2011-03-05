@@ -1,0 +1,14 @@
+der resetcard gibt man in folgendem format pakete vor:
+
+^
+<destination>
+<lenght>
+payload
+$
+
+Beispiel:
+^
+01
+04
+open
+$
