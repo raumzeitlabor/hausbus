@@ -1,0 +1,3 @@
+Gateway, welches aus dem Datenstrom des Nemo10 (oder später des neuen
+Busmasters) Pakete parsed und diese zur Verfügung stellt via HTTP. Umgedreht
+werden HTTP-Requests auf den Bus geschickt.
