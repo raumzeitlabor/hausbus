@@ -69,17 +69,11 @@ static void debug_printf(const char *fmt, ...) {
 void network_process(void)
 {
     /* also check packet counter, see errata #6 */
-#   ifdef ENC28J60_REV4_WORKAROUND
     uint8_t pktcnt = read_control_register(REG_EPKTCNT);
-#   endif
 
     /* if no interrupt occured and no packets are in the receive
      * buffer, return */
-    if ( !interrupt_occured()
-#   ifdef ENC28J60_REV4_WORKAROUND
-                || pktcnt == 0
-#   endif
-           )
+    if ( !interrupt_occured() || pktcnt == 0)
         return;
 
 #   if defined(ENC28J60_REV4_WORKAROUND) && defined(DEBUG_REV4_WORKAROUND)
@@ -151,7 +145,7 @@ void network_process(void)
     }
 
     /* packet receive flag */
-    if (EIR & _BV(PKTIF)) {
+    if (EIR & _BV(PKTIF) || pktcnt > 0) {
 #if 0
       if (uip_buf_lock ())
 	return;			/* already locked */
