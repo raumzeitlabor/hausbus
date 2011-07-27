@@ -192,7 +192,7 @@ static void raw_send(const char *str, int payload_len) {
 int main(int argc, char *argv[]) {
     /* Disable driver enable for RS485 ASAP */
     DDRC |= (1 << PC2);
-    PINC &= ~(1 << PC2);
+    PORTC &= ~(1 << PC2);
 
     /* Initialize UART */
     net_init();
