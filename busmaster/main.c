@@ -18,6 +18,11 @@
 #include "icmpv6.h"
 
 uint8_t lbuffer[32];
+/* If burst_remain > 0, we will immediately send out another sendreq to
+ * burst_sender after receiving a package from him */
+uint8_t burst_remain = 0;
+uint8_t burst_sender = 0;
+
 /*
  * ----------------------------------------------------------------------
  * The following settings affect how many devices you can put on your bus
@@ -262,7 +267,11 @@ int main(int argc, char *argv[]) {
                 syslog_send("pong received", strlen("pong received"));
                 /* TODO: store that this controller is reachable */
                 /* check if the controller has any waiting messages */
+
                 if (payload[4] > 0) {
+                    burst_remain = (payload[4] - 1);
+                    burst_sender = packet->source;
+
                     /* request the message */
                     fmt_packet(lbuffer, packet->source, 0, "send", 4);
                     struct buspkt *reply = (struct buspkt*)lbuffer;
@@ -274,6 +283,23 @@ int main(int argc, char *argv[]) {
 
                     _delay_ms(25);
                     cnt = 0;
+                }
+            } else {
+                if (packet->source == burst_sender && burst_remain > 0) {
+                    burst_remain--;
+                    fmt_packet(lbuffer, packet->source, 0, "send", 4);
+                    struct buspkt *reply = (struct buspkt*)lbuffer;
+                    //syslog_send("sending packet", strlen("sending packet"));
+                    _delay_ms(25);
+                    send_packet(reply);
+                    syslog_send("nother sendreq sent", strlen("nother sendreq sent"));
+                    //syslog_send(reply, reply->length_lo + sizeof(struct buspkt));
+
+                    _delay_ms(25);
+                    cnt = 0;
+                } else {
+                    burst_sender = 0;
+                    burst_remain = 0;
                 }
             }
 
