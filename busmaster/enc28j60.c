@@ -285,36 +285,16 @@ void init_enc28j60(void)
      * and frame length checking */
     bit_field_set(REG_MACON3, _BV(PADCFG0) | _BV(TXCRCEN) | _BV(FRMLNEN));
 
-    /* set full-duplex */
-	write_phy(PHY_PHCON1, 0 * _BV(PDPXMD) );
+    /* set half-duplex */
+    bit_field_set(REG_MACON3, _BV(FULDPX));
 
+    /* configure inter-gap register with default value (0x12) from datasheet
+     * for half-duplex operation */
+    write_control_register(REG_MABBIPG, 0x12);
 
-    /* read PHCON1 to check if full-duplex is enabled */
-    if (read_phy(PHY_PHCON1) & _BV(PDPXMD)) {
-
-        bit_field_set(REG_MACON3, _BV(FULDPX));
-
-        /* configure inter-gap register with default value (0x12) from datasheet
-         * for half-duplex operation */
-        write_control_register(REG_MABBIPG, 0x12);
-
-        /* configure other gap registers */
-        write_control_register(REG_MAIPGL, 0x12);
-        write_control_register(REG_MAIPGH, 0x0C);
-
-    } else {
-
-        bit_field_clear(REG_MACON3, _BV(FULDPX));
-
-        /* configure inter-gap register with default value (0x15) from datasheet
-         * for full-duplex operation */
-        write_control_register(REG_MABBIPG, 0x15);
-
-        /* configure other gap registers */
-        write_control_register(REG_MAIPGL, 0x12);
-        write_control_register(REG_MAIPGH, 0x0C);
-
-    }
+    /* configure other gap registers */
+    write_control_register(REG_MAIPGL, 0x12);
+    write_control_register(REG_MAIPGH, 0x0C);
 
     /* write maximum frame length, append 4 bytes for crc (added by enc28j60) */
     write_control_register(REG_MAMXFLL, LO8(NET_MAX_FRAME_LENGTH + 4));
@@ -338,6 +318,9 @@ void init_enc28j60(void)
     write_control_register(REG_EIE, _BV(INTIE) | _BV(LINKIE) | _BV(PKTIE) | _BV(TXIE) | _BV(TXERIF) | _BV(RXERIF));
     /* do additional steps to enable link change interrupt */
     write_phy(PHY_PHIE, _BV(PGEIE) | _BV(PLINKIE));
+
+    /* set phy to half-duplex */
+    write_phy(PHY_PHCON1, 0x0000);
 
     /* set filters */
 
