@@ -233,8 +233,8 @@ int main(int argc, char *argv[]) {
                 //syslog_send("sending packet", strlen("sending packet"));
                 send_packet(packet);
                 _delay_ms(25);
-                cnt = 85;
                 syslog_send("ethernet to rs485 done", strlen("ethernet to rs485 done"));
+                cnt = 35;
             }
 
             //syslog_send("received a packet", strlen("received a packet"));
@@ -243,7 +243,7 @@ int main(int argc, char *argv[]) {
             uip_recvlen = 0;
         }
         _delay_ms(10);
-        if (cnt++ == 100) {
+        if (cnt++ == 50) {
             fmt_packet(lbuffer, 1, 0, "ping", 4);
             struct buspkt *packet = (struct buspkt*)lbuffer;
             syslog_send("ping sent", strlen("ping sent"));
