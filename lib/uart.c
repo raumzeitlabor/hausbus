@@ -272,9 +272,11 @@ void net_init() {
     /* Generate an interrupt on incoming data, enable receiver/transmitter */
     UCSR0B = (1 << RXCIE0) | (1 << RXEN0) | (1 << TXEN0);
 
+#ifndef DEBUG
     /* We use 9N1 for multi-cpu-mode */
     UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
     UCSR0B |= (1 << UCSZ02);
+#endif
 
 #ifndef BUSMASTER
     /* enable multi-cpu */
