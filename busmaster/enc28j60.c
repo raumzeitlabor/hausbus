@@ -220,23 +220,21 @@ void write_phy(uint8_t address, uint16_t data)
 
 void reset_controller(void)
 {
+    uint8_t i;
 
-    /* aquire device */
-    cs_low();
+    do {
+        _delay_ms(1);
+        /* aquire device */
+        cs_low();
 
-    /* send opcode */
-    spi_send(CMD_RESET);
+        /* send opcode */
+        spi_send(CMD_RESET);
 
-    /* wait until the controller is ready */
-#ifdef ENC28J60_REV5_WORKAROUND
-    _delay_ms (2);
-#else
-    while (!(read_control_register(REG_ESTAT) & _BV(CLKRDY)));
-#endif
+        cs_high();
+        _delay_ms(1);
 
-    /* release device */
-    cs_high();
-
+        i = read_control_register(REG_ESTAT);
+    } while ((i & 0x08) || (~i & _BV(CLKRDY)));
 }
 
 void reset_rx(void)
