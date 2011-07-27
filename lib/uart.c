@@ -136,7 +136,7 @@ uint8_t get_uartwrite() {
 #if defined(__AVR_ATmega644__) || (defined(MCU) && MCU == atmega644p)
 ISR(USART0_RX_vect) {
 #else
-ISR(USART_RX_vect) {
+ISR(USART1_RX_vect) {
 #endif
     uint8_t usr;
     uint8_t data;
@@ -234,7 +234,7 @@ void skip_byte() {
 #if defined(__AVR_ATmega644__) || (defined(MCU) && MCU == atmega644p)
 ISR(USART0_TX_vect) {
 #else
-ISR(USART_TX_vect) {
+ISR(USART1_TX_vect) {
 #endif
     if (txcnt == 0) {
         RS485_DE_PORT &= ~(1 << RS485_DE_PIN);
