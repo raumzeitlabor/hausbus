@@ -6,41 +6,70 @@ use IO::Socket::Multicast6;
 use IO::Socket::INET6;
 use AnyEvent::Socket;
 use AnyEvent::Handle;
+use Socket qw(:all);
+use Socket6 qw(inet_ntop unpack_sockaddr_in6);
 use v5.10;
 
-has '_socket' => (is => 'rw', isa => 'IO::Socket::Multicast6', default => undef);
-has '_io' => (is => 'rw', isa => 'Ref', default => undef);
-has 'on_read' => (is => 'rw', isa => 'CodeRef', default => undef);
-has 'group' => (is => 'ro', isa => 'Int', required => 1);
+has 'on_read'  => (
+    is         => 'rw',
+    isa        => 'CodeRef',
+    predicate  => 'has_read_cb',
+);
+
+has '_groups'  => (
+    is         => 'ro',
+    isa        => 'ArrayRef[Int]',
+    init_arg   => 'groups',
+    required   => 1,
+    traits     => [ 'Array' ],
+    handles    => {
+        groups => 'elements',
+    }
+);
+
+has 'interface' => (
+    is          => 'ro',
+    isa         => 'Str',
+    required    => 1,
+);
+
+my @watchers;
 
 sub BUILD {
-  my $self = shift;
+    my $self = shift;
 
-  my $s = IO::Socket::Multicast6->new(
-      Domain => AF_INET6,
-      LocalPort => 41999
-  );
+    my $interface = $self->interface;
+    my @groups = $self->groups;
 
-  $s->mcast_add('ff05::b5:' . sprintf("%x", $self->group));
+    for my $group (@groups) {
+        my $address = 'ff05::b5:' . sprintf("%x", $group);
+        my $socket = IO::Socket::Multicast6->new(
+            Domain => AF_INET6,
+            LocalAddr => $address,
+            LocalPort => 41999,
+        );
 
-  $self->_socket($s);
+        $socket->mcast_add($address, $interface);
 
-  my $io;
-  $io = AnyEvent->io(
-        fh => $s,
-        poll => "r",
-        cb => sub {
-        if (!defined($self->on_read)) {
-          return;
-        }
+        my $io;
+        $io = AnyEvent->io(
+            fh => $socket,
+            poll => "r",
+            cb => sub {
+                return unless $self->has_read_cb;
 
-        my $buffer;
-        $s->recv($buffer, 256);
+                my $buffer;
+                my $sender = $socket->recv($buffer, 256);
+                my ($port, $packed_addr) = unpack_sockaddr_in6($sender);
+                $sender = inet_ntop(AF_INET6, $packed_addr);
+                $sender =~ s/^fd1a:56e6:97e9:0:b5:ff:fe00://g;
 
-        # TODO: find out sender
-        $self->on_read->(undef, $buffer);
-      });
-  $self->_io($io);
+                $self->on_read->($sender, $group, $buffer);
+            }
+        );
+
+        push @watchers, $io;
+    }
 }
 
 sub send {
