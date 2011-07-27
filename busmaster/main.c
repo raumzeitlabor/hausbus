@@ -207,7 +207,6 @@ int main(int argc, char *argv[]) {
 
     DBG("Initialized ENC28J60\r\n");
 
-    char buf[16] = "serial:       X\n";
     int cnt = 0;
     while (1) {
         network_process();
@@ -215,6 +214,7 @@ int main(int argc, char *argv[]) {
             DBG("Handling packet\r\n");
             handle_icmpv6();
 
+            /* Is this a UDP packet? */
             if (uip_recvbuf[20] == 0x11) {
                 /* UDP */
                 uint8_t *udp = uip_recvbuf + 14 + 40;
@@ -233,7 +233,6 @@ int main(int argc, char *argv[]) {
             }
 
             //syslog_send("received a packet", strlen("received a packet"));
-            buf[14] = uip_recvlen;
 
             //syslog_send(uip_recvbuf, uip_recvlen);
             uip_recvlen = 0;
