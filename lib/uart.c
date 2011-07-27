@@ -278,7 +278,10 @@ void net_init() {
     UCSR0B |= (1 << UCSZ02);
 #endif
 
-#ifndef BUSMASTER
+#ifdef BUSMASTER
+    /* disable multi-cpu */
+    UCSR0A &= ~(1 << MPCM0);
+#else
     /* enable multi-cpu */
     UCSR0A |= (1 << MPCM0);
 #endif
