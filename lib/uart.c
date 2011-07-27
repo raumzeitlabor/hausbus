@@ -7,6 +7,7 @@
 #define BAUD 38400
 #include <util/setbaud.h>
 #include <util/delay.h>
+#include <stdio.h>
 
 #include "bus.h"
 
@@ -20,7 +21,7 @@
     #if defined(__AVR_ATmega644__) || (defined(MCU) && MCU == atmega644p)
     #define RS485_DE_DDR    DDRD
     #define RS485_DE_PORT   PORTD
-    #define RS485_DE_PIN    PD4
+    #define RS485_DE_PIN    PD5
     #else
     #define RS485_DE_DDR    DDRD
     #define RS485_DE_PORT   PORTD
