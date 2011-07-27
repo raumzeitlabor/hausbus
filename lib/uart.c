@@ -4,7 +4,7 @@
 #include <avr/io.h>
 #include <avr/wdt.h>
 #include <avr/interrupt.h>
-#define BAUD 9600
+#define BAUD 38400
 #include <util/setbaud.h>
 #include <util/delay.h>
 
