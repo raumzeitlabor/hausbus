@@ -83,9 +83,9 @@ bool search_pin(const char *pin) {
                        /* skip header */
             (uint8_t*)(CRC32_SIZE + NUM_SIZE +
                        /* every pin is 3 bytes long */
-                       (count * 3) +
+                       ((uint16_t)count * 3) +
                        /* every 6 pins, there are 4 bytes CRC */
-                       ((count / 6) * 4));
+                       (((uint16_t)count / 6) * 4));
 
         eeprom_read_block(buffer, offset, 3);
 
@@ -128,7 +128,7 @@ bool verify_checksum() {
                        /* skip header */
             (uint8_t*)(CRC32_SIZE + NUM_SIZE +
                        /* every block is BLOCK_SIZE bytes */
-                       (count * BLOCK_SIZE));
+                       ((uint16_t)count * BLOCK_SIZE));
 
         eeprom_read_block(block, offset, BLOCK_SIZE);
 
