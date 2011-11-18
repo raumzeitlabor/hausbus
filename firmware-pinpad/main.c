@@ -122,22 +122,6 @@ static void send_state() {
         }
     }
     sendmsg("SRAW bork");
-
-#if 0
-    bool pb2 = (PINB & (1 << PB2));
-    bool pb3 = (PINB & (1 << PB3));
-    bool pb4 = (PINB & (1 << PB4));
-    char msg[] = "SRAW abc";
-    msg[5] = pb2;
-    msg[6] = pb3;
-    msg[7] = pb4;
-    senddata(msg, 8);
-    if (pb3 && !pb4)
-        sendmsg("STAT lock");
-    else if (!pb3 && pb4)
-        sendmsg("STAT open");
-    else sendmsg("STAT broke");
-#endif
 }
 
 void lock_door() {
@@ -149,13 +133,6 @@ void lock_door() {
     freq = 1 * 3855;
     OCR1BH = (freq & 0xFF00) >> 8;
     OCR1BL = (freq & 0x00FF);
-#if 0
-    /* Direkte Ansteuerung des HomeTec */
-    PORTA &= ~(1 << PA3);
-    _delay_ms(500);
-    PORTA |= (1 << PA3);
-#endif
-
     /* laut piepsen */
     //if (get_state() != LOCKED_PERFECT) {
        // uart2_puts("^BEEP 2 $\n");
@@ -174,11 +151,6 @@ void unlock_door() {
     freq = 1 * 3855;
     OCR1BH = (freq & 0xFF00) >> 8;
     OCR1BL = (freq & 0x00FF);
-    /*
-    PORTA &= ~(1 << PA2);
-    _delay_ms(500);
-    PORTA |= (1 << PA2);
-    */
 }
 
 ISR(USART1_RX_vect) {
