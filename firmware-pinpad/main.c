@@ -95,12 +95,13 @@ static void send_pwm_state(uint8_t new_state) {
     sensor1 = (new_state & (1 << 1));
     /* Das dritte und vierte Bit geben den Aktionscode an */
     state = (new_state & ((1 << 2) | (1 << 3))) >> 2;
-    char msg[] = "SRAW aabc";
+    char msg[] = "SRAW aabcd";
     msg[5] = (new_state & (1 << 3));
     msg[6] = (new_state & (1 << 2));
     msg[7] = sensor1;
     msg[8] = sensor2;
-    senddata(msg, 9);
+    msg[9] = (PINB & (1 << PB0));
+    senddata(msg, 10);
     if (sensor1 && !sensor2)
         sendmsg("STAT lock");
         /* locked */
@@ -324,7 +325,7 @@ int main(int argc, char *argv[]) {
 
     /* set pins for status */
     DDRB = 0;
-    PORTB = (1 << PB2) | (1 << PB3) | (1 << PB4);
+    PORTB = (1 << PB0) | (1 << PB2) | (1 << PB3) | (1 << PB4);
 
     /* init serial line to the pinpad frontend */
     UBRR1H = UBRRH_VALUE;
