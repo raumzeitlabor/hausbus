@@ -19,6 +19,7 @@
 
 
 #include "bus.h"
+#include "crc32.h"
 #include "uart2.h"
 
 //#define DEBUG
@@ -393,6 +394,42 @@ int main(int argc, char *argv[]) {
                 packetcnt--;
 
                 _delay_ms(25);
+            }
+            else if (payload[0] == 'E') {
+                /* EEPROM write command:
+                 * 'E' <uint16_t dest><uint8_t len><bytes><uint32_t crc32> */
+
+                /* Skip the 'E' */
+                payload++;
+
+                /* Store the EEPROM destination address. */
+                uint16_t dest = (payload[0] << 8) | payload[1];
+                payload += 2;
+
+                /* Store the number of bytes in this packet. */
+                uint8_t len = payload[0];
+                payload++;
+
+                /* Calculate the checksum and see if it matches. */
+                uint32_t reg32 = 0xffffffff;
+                uint32_t crc32 = crc32_messagecalc(&reg32, payload, len);
+
+                uint8_t *stored_crc = payload + len;
+
+                if (((crc32 >> 24) & 0xFF) != stored_crc[0] ||
+                    ((crc32 >> 16) & 0xFF) != stored_crc[1] ||
+                    ((crc32 >>  8) & 0xFF) != stored_crc[2] ||
+                    ( crc32        & 0xFF) != stored_crc[3]) {
+                    /* The CRC32 did not match, send an error and discard this
+                     * packet. */
+                    sendmsg("EEP CRCERR");
+                } else {
+                    /* The CRC32 did match. Write to the EEPROM and acknowledge
+                     * the write. */
+                    // TODO: write to eeprom:
+                    // eeprom_update_block(payload, (uint8_t*)(dest), len);
+                    sendmsg("EEP ACK");
+                }
             }
             else if (memcmp(payload, "open", strlen("open")) == 0) {
                 unlock_door();
