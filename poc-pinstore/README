@@ -9,5 +9,5 @@ Mock testing:
 Auf dem Hostsystem (also nicht Microcontroller) den C-Code compilen und mit
 valgrind nach Speicherfehlern suchen:
 
-$ gcc -g -DMOCK -std=c99 -Imockincludes -I../lib -o mock_verifypin verifypin.c mock.c crc32_v1.c
+$ gcc -g -DMOCK -std=c99 -Imockincludes -I../lib -o mock_verifypin verifypin.c mock.c ../lib/crc32.c
 $ valgrind -v --log-file=/tmp/vg --leak-check=full --track-origins=yes --num-callers=20 --tool=memcheck -- ./mock_verifypin

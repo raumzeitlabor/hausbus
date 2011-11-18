@@ -35,7 +35,10 @@ uart2.o: ../lib/uart2.c
 bus.o: ../lib/bus.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-firmware.hex: verifypin.o crc32_v1.o uart.o uart2.o bus.o
+crc32.o: ../lib/crc32.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+firmware.hex: verifypin.o crc32.o uart.o uart2.o bus.o
 	$(CC) -mmcu=atmega644p -o $(shell basename $@ .hex).bin $^
 	avr-objcopy -O ihex -R .eeprom $(shell basename $@ .hex).bin $@
 	avr-size --mcu=${MCU} -C $(shell basename $@ .hex).bin

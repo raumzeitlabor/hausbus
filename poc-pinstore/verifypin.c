@@ -10,8 +10,7 @@
 #include <avr/eeprom.h>
 
 #include "bus.h"
-
-uint32_t crc32_messagecalc(uint32_t *reg32, const uint8_t *data, uint8_t len);
+#include "crc32.h"
 
 /* a CRC32 checksum needs 4 bytes */
 #define CRC32_SIZE 4
