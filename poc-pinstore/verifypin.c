@@ -212,6 +212,8 @@ int main() {
 
     uart_puts("Tests completed.\r\n");
     /* Sleep. */
+#ifndef MOCK
     for (;;) {
     }
+#endif
 }

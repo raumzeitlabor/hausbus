@@ -1,1 +1,13 @@
 proof-of-concepts für das speichern von PINs auf dem pinpad-controller-EEPROM
+
+Zum Ausführen auf einem Microcontroller mit 2K EEPROM (z.B. ATmega644p).
+Schreibt einen EEPROM-dump und verifiziert ihn anschließend.
+
+Mock testing:
+=============
+
+Auf dem Hostsystem (also nicht Microcontroller) den C-Code compilen und mit
+valgrind nach Speicherfehlern suchen:
+
+$ gcc -g -DMOCK -std=c99 -Imockincludes -I../lib -o mock_verifypin verifypin.c mock.c crc32_v1.c
+$ valgrind -v --log-file=/tmp/vg --leak-check=full --track-origins=yes --num-callers=20 --tool=memcheck -- ./mock_verifypin
