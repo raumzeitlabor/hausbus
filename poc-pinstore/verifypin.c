@@ -11,7 +11,7 @@
 
 #include "bus.h"
 
-uint32_t crc32_messagecalc(uint32_t *reg32, const uint8_t *data, int len);
+uint32_t crc32_messagecalc(uint32_t *reg32, const uint8_t *data, uint8_t len);
 
 /* a CRC32 checksum needs 4 bytes */
 #define CRC32_SIZE 4
@@ -81,7 +81,7 @@ bool search_pin(const char *pin) {
     for (uint8_t count = 0; count < num_pins; count++) {
         const uint8_t *offset =
                        /* skip header */
-            (uint8_t*)(CRC32_SIZE + NUM_SIZE +
+            (uint8_t*)((uint8_t*)NULL + CRC32_SIZE + NUM_SIZE +
                        /* every pin is 3 bytes long */
                        ((uint16_t)count * 3) +
                        /* every 6 pins, there are 4 bytes CRC */
@@ -126,7 +126,7 @@ bool verify_checksum() {
     for (uint8_t count = 0; count < num_blocks; count++) {
         const uint8_t *offset =
                        /* skip header */
-            (uint8_t*)(CRC32_SIZE + NUM_SIZE +
+            (uint8_t*)((uint8_t*)NULL + CRC32_SIZE + NUM_SIZE +
                        /* every block is BLOCK_SIZE bytes */
                        ((uint16_t)count * BLOCK_SIZE));
 
