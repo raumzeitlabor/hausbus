@@ -429,8 +429,7 @@ int main(int argc, char *argv[]) {
                 } else {
                     /* The CRC32 did match. Write to the EEPROM and acknowledge
                      * the write. */
-                    // TODO: write to eeprom:
-                    // eeprom_update_block(payload, (uint8_t*)(dest), len);
+                    eeprom_update_block(payload, (uint8_t*)(dest), len);
                     sendmsg("EEP ACK");
                 }
             }
