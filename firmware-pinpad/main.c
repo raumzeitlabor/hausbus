@@ -410,9 +410,12 @@ int main(int argc, char *argv[]) {
                 uint8_t len = payload[0];
                 payload++;
 
-                /* Calculate the checksum and see if it matches. */
+                /* Calculate the checksum over the whole packet and see if it
+                 * matches the stored checksum. */
                 uint32_t reg32 = 0xffffffff;
-                uint32_t crc32 = crc32_messagecalc(&reg32, payload, len);
+                uint32_t crc32 = crc32_messagecalc(&reg32,
+                        (uint8_t*)packet + sizeof(struct buspkt),
+                        len + 1 + 2 + 1);
 
                 uint8_t *stored_crc = payload + len;
 
