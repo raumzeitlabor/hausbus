@@ -1,0 +1,13 @@
+EEPROM write test:
+
+The command is specified as follows:
+'E' <uint16_t dest><uint8_t len><bytes><uint32_t crc32>
+
+To send a valid command:
+perl -Ilib -MBusmaster -E 'Busmaster->new()->send('pinpad', "E\0\0\4abc\x3D\x19\xA7\x2D")'
+
+The expected reply is:
+payload = $VAR1 = 'EEP ACK';
+
+If you modify the commend to not contain a valid checksum, the expected reply is:
+payload = $VAR1 = 'EEP CRCERR';
