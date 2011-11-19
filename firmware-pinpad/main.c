@@ -16,11 +16,21 @@
 #include <stdint.h>
 #define BAUD 9600
 #include <util/setbaud.h>
-
+#include <avr/eeprom.h>
 
 #include "bus.h"
 #include "crc32.h"
 #include "uart2.h"
+
+/* a CRC32 checksum needs 4 bytes */
+#define CRC32_SIZE 4
+/* the amount of pins needs 1 byte (0 <= num_pins <= 180) */
+#define NUM_SIZE 1
+/* a PIN is encoded in 3 bytes */
+#define PIN_SIZE 3
+/* we have 6 pins (= 6 * 3 = 18 bytes) per block */
+#define PINS_PER_BLOCK 6
+#define BLOCK_SIZE ((PINS_PER_BLOCK * PIN_SIZE) + CRC32_SIZE)
 
 //#define DEBUG
 #ifdef DEBUG
@@ -85,6 +95,41 @@ static bool sendmsg(const char *msg) {
     return senddata(msg, strlen(msg));
 }
 
+static uint32_t calculate_eeprom_checksum() {
+    const uint8_t num_pins = eeprom_read_byte((uint8_t*)CRC32_SIZE);
+    /* In the case of 0 PINs, we don’t consider the EEPROM valid to avoid
+     * checking at all. */
+    if (num_pins == 0 || num_pins > 170)
+        return 0xD202EF8D; /* CRC of "\0", meaning an empty EEPROM */
+
+    /* Calculate the number of blocks, rounding up. That is, for 2 pins, we
+     * still need one whole block. */
+    const uint8_t num_blocks = (num_pins + PINS_PER_BLOCK - 1) / PINS_PER_BLOCK;
+
+    /* Check the CRC32 for the whole (used part of the) EEPROM. */
+    /* Register for checking the whole EEPROM (in chunks) */
+    uint32_t whole_reg32 = 0xffffffff;
+    uint32_t whole_crc = 0;
+    crc32_messagecalc(&whole_reg32, &num_pins, 1);
+
+    uint8_t block[BLOCK_SIZE];
+    for (uint8_t count = 0; count < num_blocks; count++) {
+        const uint8_t *offset =
+                       /* skip header */
+            (uint8_t*)((uint8_t*)NULL + CRC32_SIZE + NUM_SIZE +
+                       /* every block is BLOCK_SIZE bytes */
+                       ((uint16_t)count * BLOCK_SIZE));
+
+        eeprom_read_block(block, offset, BLOCK_SIZE);
+
+        /* Continuously update the whole_crc */
+        whole_crc = crc32_messagecalc(&whole_reg32, block, BLOCK_SIZE);
+    }
+
+    return whole_crc;
+}
+
+
 static void send_pwm_state(uint8_t new_state) {
     uint8_t sensor1;
     uint8_t sensor2;
@@ -109,6 +154,19 @@ static void send_pwm_state(uint8_t new_state) {
     else if (!sensor1 && sensor2)
         sendmsg("STAT open");
     else sendmsg("STAT broke");
+
+    /* This does not really belong into this function, but it's the most
+     * pragmatic place right now: We want to broadcast the EEPROM checksum
+     * about once per minute, so we just broadcast it whenever the status is
+     * queried. */
+    uint32_t whole_crc = calculate_eeprom_checksum();
+    msg[0] = 'X';
+    msg[1] = ' ';
+    msg[2] = ((whole_crc >> 24) & 0xFF);
+    msg[3] = ((whole_crc >> 16) & 0xFF);
+    msg[4] = ((whole_crc >>  8) & 0xFF);
+    msg[5] =  (whole_crc        & 0xFF);
+    senddata(msg, 6);
 }
 
 static void send_state() {
