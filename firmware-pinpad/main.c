@@ -393,11 +393,6 @@ static void handle_command(const char *buffer) {
                 if (search_pin(pin)) {
                     uart2_puts("^LED 2 2$");
                     uart2_puts("^BEEP 2 $\n");
-                    pincnt = 0;
-                    memset(pin, '\0', sizeof(pin));
-                    // After 7 days of testing and no problems, we can turn
-                    // this on:
-                    //unlock_door();
 
                     char msg[] = "VF 123456 OK";
                     msg[3] = pin[0];
@@ -407,6 +402,12 @@ static void handle_command(const char *buffer) {
                     msg[7] = pin[4];
                     msg[8] = pin[5];
                     sendmsg(msg);
+
+                    pincnt = 0;
+                    memset(pin, '\0', sizeof(pin));
+                    // After 7 days of testing and no problems, we can turn
+                    // this on:
+                    //unlock_door();
                     return;
                 }
                 pin[6] = '#';
