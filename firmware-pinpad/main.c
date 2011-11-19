@@ -129,6 +129,107 @@ static uint32_t calculate_eeprom_checksum() {
     return whole_crc;
 }
 
+static bool verify_checksum() {
+    const uint8_t num_pins = eeprom_read_byte((uint8_t*)CRC32_SIZE);
+    /* In the case of 0 PINs, we don’t consider the EEPROM valid to avoid
+     * checking at all. */
+    if (num_pins == 0)
+        return false;
+
+    /* Calculate the number of blocks, rounding up. That is, for 2 pins, we
+     * still need one whole block. */
+    const uint8_t num_blocks = (num_pins + PINS_PER_BLOCK - 1) / PINS_PER_BLOCK;
+
+    /* Check the CRC32 for the whole (used part of the) EEPROM. */
+    /* Register for checking the whole EEPROM (in chunks) */
+    uint32_t whole_reg32 = 0xffffffff;
+    uint32_t whole_crc = 0;
+    crc32_messagecalc(&whole_reg32, &num_pins, 1);
+
+    /* Check the CRC of each block. Better safe than sorry. Also, we need to
+     * support CRC == 0x00000000 and CRC == 0xFFFFFFFF but filter out an empty
+     * EEPROM. So we check if any of the block CRCs is non-zero and non-FF. */
+    bool non_zero_crc = false;
+
+    uint8_t block[BLOCK_SIZE];
+    uint32_t block_reg32;
+    uint32_t block_crc;
+    for (uint8_t count = 0; count < num_blocks; count++) {
+        const uint8_t *offset =
+                       /* skip header */
+            (uint8_t*)((uint8_t*)NULL + CRC32_SIZE + NUM_SIZE +
+                       /* every block is BLOCK_SIZE bytes */
+                       ((uint16_t)count * BLOCK_SIZE));
+
+        eeprom_read_block(block, offset, BLOCK_SIZE);
+
+        /* Calculate the CRC for this block */
+        block_reg32 = 0xffffffff;
+        block_crc = crc32_messagecalc(&block_reg32, block, BLOCK_SIZE - CRC32_SIZE);
+
+        /* Continuously update the whole_crc */
+        whole_crc = crc32_messagecalc(&whole_reg32, block, BLOCK_SIZE);
+
+        /* Error out if this block has a wrong CRC */
+        if (((block_crc >> 24) & 0xFF) != block[BLOCK_SIZE - CRC32_SIZE + 0] ||
+            ((block_crc >> 16) & 0xFF) != block[BLOCK_SIZE - CRC32_SIZE + 1] ||
+            ((block_crc >>  8) & 0xFF) != block[BLOCK_SIZE - CRC32_SIZE + 2] ||
+            ( block_crc        & 0xFF) != block[BLOCK_SIZE - CRC32_SIZE + 3]) {
+            return false;
+        }
+        if (block_crc != 0x00000000 && block_crc != 0xFFFFFFFF)
+            non_zero_crc = true;
+    }
+
+    /* Error out if the CRC32 for the whole EEPROM is wrong */
+    eeprom_read_block(block, (uint8_t*)0, CRC32_SIZE);
+    if (((whole_crc >> 24) & 0xFF) != block[0] ||
+        ((whole_crc >> 16) & 0xFF) != block[1] ||
+        ((whole_crc >>  8) & 0xFF) != block[2] ||
+        ( whole_crc        & 0xFF) != block[3]) {
+        return false;
+    }
+
+    return non_zero_crc;
+}
+
+/*
+ * Searches the EEPROM for a specific PIN.
+ *
+ * NOTE that this function assumes the EEPROM was verified, e.g.
+ * verify_eeprom() has been called before!
+ *
+ * Returns whether the PIN was found.
+ *
+ */
+static bool search_pin(const char *pin) {
+    /* We store the high, mid and low bytes for easy/fast comparison */
+    const uint8_t high = ((pin[0] - '0') << 4) | (pin[1] - '0');
+    const uint8_t mid = ((pin[2] - '0') << 4) | (pin[3] - '0');
+    const uint8_t low = ((pin[4] - '0') << 4) | (pin[5] - '0');
+
+    const uint8_t num_pins = eeprom_read_byte((uint8_t*)CRC32_SIZE);
+    uint8_t buffer[3];
+
+    for (uint8_t count = 0; count < num_pins; count++) {
+        const uint8_t *offset =
+                       /* skip header */
+            (uint8_t*)((uint8_t*)NULL + CRC32_SIZE + NUM_SIZE +
+                       /* every pin is 3 bytes long */
+                       ((uint16_t)count * 3) +
+                       /* every 6 pins, there are 4 bytes CRC */
+                       (((uint16_t)count / 6) * 4));
+
+        eeprom_read_block(buffer, offset, 3);
+
+        if (buffer[0] == high &&
+            buffer[1] == mid &&
+            buffer[2] == low)
+            return true;
+    }
+
+    return false;
+}
 
 static void send_pwm_state(uint8_t new_state) {
     uint8_t sensor1;
@@ -283,6 +384,44 @@ static void handle_command(const char *buffer) {
         if (c != '#') {
             uart2_puts("^LED 2 1$\n");
             uart2_puts("^BEEP 1 $\n");
+        }
+        if (pincnt == 7 && pin[6] == '#') {
+            /* Ensure that the whole EEPROM is consistent before we search it
+             * for the PIN. */
+            if (verify_checksum()) {
+                pin[6] = '\0';
+                if (search_pin(pin)) {
+                    uart2_puts("^LED 2 2$");
+                    uart2_puts("^BEEP 2 $\n");
+                    pincnt = 0;
+                    memset(pin, '\0', sizeof(pin));
+                    // After 7 days of testing and no problems, we can turn
+                    // this on:
+                    //unlock_door();
+
+                    char msg[] = "VF 123456 OK";
+                    msg[3] = pin[0];
+                    msg[4] = pin[1];
+                    msg[5] = pin[2];
+                    msg[6] = pin[3];
+                    msg[7] = pin[4];
+                    msg[8] = pin[5];
+                    sendmsg(msg);
+                    return;
+                }
+                pin[6] = '#';
+                char msg[] = "VF 123456 NO";
+                msg[3] = pin[0];
+                msg[4] = pin[1];
+                msg[5] = pin[2];
+                msg[6] = pin[3];
+                msg[7] = pin[4];
+                msg[8] = pin[5];
+                sendmsg(msg);
+            } else {
+                char msg[] = "VF CRCFAIL";
+                sendmsg(msg);
+            }
         }
         if (pincnt == 7 && strncmp(pin, "777#", 5) == 0) {
             uart2_puts("^LED 2 2$");
