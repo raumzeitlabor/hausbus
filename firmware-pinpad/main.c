@@ -405,9 +405,7 @@ static void handle_command(const char *buffer) {
 
                     pincnt = 0;
                     memset(pin, '\0', sizeof(pin));
-                    // After 7 days of testing and no problems, we can turn
-                    // this on:
-                    //unlock_door();
+                    unlock_door();
                     return;
                 }
                 pin[6] = '#';
