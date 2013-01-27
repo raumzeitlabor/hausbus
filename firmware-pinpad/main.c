@@ -422,6 +422,7 @@ static void handle_command(const char *buffer) {
                 sendmsg(msg);
             }
         }
+        /* fallback pin */
         if (pincnt == 7 && strncmp(pin, "777#", 5) == 0) {
             uart2_puts("^LED 2 2$");
             uart2_puts("^BEEP 2 $\n");
@@ -429,6 +430,7 @@ static void handle_command(const char *buffer) {
             memset(pin, '\0', sizeof(pin));
             unlock_door();
             sendmsg("OPEN pin");
+        /* close */
         } else if (pincnt == 4 && strncmp(pin, "666#", 5) == 0) {
             uart2_puts("^LED 2 2$");
             uart2_puts("^BEEP 2 $\n");
@@ -437,19 +439,18 @@ static void handle_command(const char *buffer) {
             lock_door();
             sendmsg("LOCK pin");
         } else if (pincnt == 5 && strncmp(pin, "0000#", 5) == 0) {
-
             uart2_puts("^LED 2 2$");
             uart2_puts("^BEEP 2 $\n");
             pincnt = 0;
             memset(pin, '\0', sizeof(pin));
-    int freq = 16 * 3855;
-    OCR1BH = (freq & 0xFF00) >> 8;
-    OCR1BL = (freq & 0x00FF);
-                sendmsg("reset PIN");
-                _delay_ms(250);
-    freq = 1 * 3855;
-    OCR1BH = (freq & 0xFF00) >> 8;
-    OCR1BL = (freq & 0x00FF);
+            int freq = 16 * 3855;
+            OCR1BH = (freq & 0xFF00) >> 8;
+            OCR1BL = (freq & 0x00FF);
+            sendmsg("reset PIN");
+            _delay_ms(250);
+            freq = 1 * 3855;
+            OCR1BH = (freq & 0xFF00) >> 8;
+            OCR1BL = (freq & 0x00FF);
         } else if (c == '#') {
             uart2_puts("^LED 1 2$^BEEP 2 $");
             //uart2_puts("^BEEP 2 $\n");
@@ -638,20 +639,19 @@ int main(int argc, char *argv[]) {
                 sendmsg("LOCK bus");
 
             } else if (memcmp(payload, "nop", strlen("nop")) == 0) {
-    int freq = 1 * 3855;
-    OCR1BH = (freq & 0xFF00) >> 8;
-    OCR1BL = (freq & 0x00FF);
+                int freq = 1 * 3855;
+                OCR1BH = (freq & 0xFF00) >> 8;
+                OCR1BL = (freq & 0x00FF);
                 sendmsg("NOP bus");
             } else if (memcmp(payload, "reset", strlen("reset")) == 0) {
-
-    int freq = 16 * 3855;
-    OCR1BH = (freq & 0xFF00) >> 8;
-    OCR1BL = (freq & 0x00FF);
+                int freq = 16 * 3855;
+                OCR1BH = (freq & 0xFF00) >> 8;
+                OCR1BL = (freq & 0x00FF);
                 sendmsg("reset BUS");
                 _delay_ms(250);
-    freq = 1 * 3855;
-    OCR1BH = (freq & 0xFF00) >> 8;
-    OCR1BL = (freq & 0x00FF);
+                freq = 1 * 3855;
+                OCR1BH = (freq & 0xFF00) >> 8;
+                OCR1BL = (freq & 0x00FF);
             } else if (memcmp(payload, "status", strlen("status")) == 0) {
                 send_state();
             }
