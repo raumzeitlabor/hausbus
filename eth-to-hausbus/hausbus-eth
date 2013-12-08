@@ -12,7 +12,7 @@ use Busmaster::Handler::Send;
 use v5.10;
 
 # hotfix, just in case the route is not properly set up in /etc/network/interfaces
-system('ip -6 r a fd1a:56e6:97e9:0:b5:ff:fe00:00/64 dev eth5');
+system('ip -6 r a fd1a:56e6:97e9:0:b5:ff:fe00:00/64 dev eth5.hausbus');
 
 print "before busmaster\n";
 my $master = Busmaster->new;

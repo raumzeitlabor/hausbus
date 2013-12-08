@@ -13,7 +13,7 @@ use Hausbus;
 use DateTime;
 use v5.10;
 
-# XXX: 6 r a fd1a:56e6:97e9:0:b5:ff:fe00:00/64 dev eth5
+# XXX: 6 r a fd1a:56e6:97e9:0:b5:ff:fe00:00/64 dev eth5.hausbus
 
 
 # TODO: proper reconnect/retry for the tcp conn
@@ -35,7 +35,7 @@ sub BUILD {
     #    $mq->publish({ source => 'pinpad', payload => 'STAT lock' });
     #};
 
-my $bus = Hausbus->new(groups => [0, 1, 50], interface => 'eth5');
+my $bus = Hausbus->new(groups => [0, 1, 50], interface => 'eth5.hausbus');
 $bus->on_read(sub {
     my ($sender, $group, $data) = @_;
     my $dt = DateTime->now(time_zone => 'Europe/Berlin')->strftime('%F %H:%M:%S');
@@ -114,7 +114,7 @@ sub send {
     say "should send $payload to $target";
     my $destination = 1;
 
-    my $bus = Hausbus->new(groups => [], interface => 'eth5');
+    my $bus = Hausbus->new(groups => [], interface => 'eth5.hausbus');
     $bus->send($destination, $payload);
 
     #my $content_length = length($payload);
