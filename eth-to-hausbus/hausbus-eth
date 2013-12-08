@@ -11,6 +11,8 @@ use Busmaster::Handler::Group;
 use Busmaster::Handler::Send;
 use v5.10;
 
+$0 = "hausbus-eth";
+
 # hotfix, just in case the route is not properly set up in /etc/network/interfaces
 system('ip -6 r a fd1a:56e6:97e9:0:b5:ff:fe00:00/64 dev eth5.hausbus');
 
